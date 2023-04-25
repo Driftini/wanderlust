@@ -9,19 +9,23 @@ PY_RESOLUTION = (640, 360)
 PY_SCALE = 2
 PY_SCALED_RES = (PY_RESOLUTION[0] * PY_SCALE, PY_RESOLUTION[1] * PY_SCALE)
 PY_TARGET_FPS = 75
+PY_TITLE = "Isometric world renderer thing"
 
 # Tile rendering constants
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
 TILE_STAGGER = 4
 
-# Chunk constants
-CHUNK_SIZE = 8
-
 # Worldgen constants
-WORLD_ORIGIN = (int(0), int(0)) # x, z
+WORLD_ORIGIN = (int(0), int(0))  # x, z
 WORLD_HEIGHT = 50
-WORLD_INIT_RADIUS = 3 # Chunk generation radius on world init
+WORLD_INIT_RADIUS = 2  # Chunk generation radius on world init
+
+# Chunk constants
+CHUNK_SIZE = 32
+# abhorrent name (it's their "width" when rendering them)
+CHUNK_RENDERX = TILE_WIDTH * 2 * CHUNK_SIZE / 2
+CHUNK_STAGGER = CHUNK_SIZE * 4
 
 # uh not a constant
 RENDER_OFFSET = [int(PY_RESOLUTION[0] / 2), int(PY_RESOLUTION[1] / 2)]
@@ -33,7 +37,7 @@ SPRITE_TILE_Z = pygame.image.load("tile_axis_z.png")
 
 # Pygame preconfig
 pygame.init()
-pygame.display.set_caption("template")
+pygame.display.set_caption(PY_TITLE)
 game_window = pygame.display.set_mode(PY_SCALED_RES, 0, 32, 0, 1)
 game_surface = pygame.Surface(PY_RESOLUTION)
 pygame.mouse.set_visible(False)
@@ -43,15 +47,24 @@ frametime = 0
 
 ALREADY_GEN = set()
 
+
 class Chunk:
     # Chunks use chunk coordinates,
     # spanning from 0 to CHUNK_SIZE on the X and Z axes
     def __init__(self):
         self.tiles = {}
-        self.tiles_old = None  # it has to be different lol
+
+        # it has to be different from self.tiles, else it never renders to cache
+        self.tiles_old = None
+
         self.cache = pygame.Surface(
-            (TILE_WIDTH * 2 * CHUNK_SIZE, TILE_HEIGHT * WORLD_HEIGHT), flags=SRCALPHA
-            #(1000, 1000), flags=SRCALPHA
+            (
+                TILE_WIDTH * 2 * CHUNK_SIZE,
+                (CHUNK_SIZE * TILE_STAGGER) * 2 +
+                WORLD_HEIGHT * TILE_HEIGHT + 4
+                # this is an actual mess (+4 is a bandaid fix for an unwanted vertical offset in tile drawing)
+            ), flags=SRCALPHA
+            # (1000, 1000), flags=SRCALPHA
         )
 
     # Convert world coords to chunk coords
@@ -73,7 +86,8 @@ class Chunk:
             self.tiles[f"{cx} {y} {cz}"] = tile
 
     def render_cache(self):
-        self.cache.fill((0, 0, 0, 10))
+        # self.cache.fill((0, 0, 0, 10))
+        self.cache.fill((0, 0, 0, 0))
 
         for coords in self.tiles.keys():
             cx, y, cz = coords.split(" ")
@@ -84,14 +98,16 @@ class Chunk:
             tinted = tile_type.copy()
 
             # Lower y tiles are shadowed
-            # shadow_func = 255 + y * 30
-            # shadow = clamp(shadow_func, 0, 255)
+            shadow_func = (y + 5) * 20
+            shadow = clamp(shadow_func, 0, 255)
 
-            # tinted.fill((shadow, shadow, shadow, 255),
-            #             special_flags=pygame.BLEND_MULT)
+            tinted.fill((shadow, shadow, shadow, 255),
+                        special_flags=pygame.BLEND_MULT)
 
             # cx is altered to center the chunk in the surface
-            draw_tile(self.cache, cx + CHUNK_SIZE - 1, y - WORLD_HEIGHT, cz, tinted)
+            # y is altered to make the whole chunk fit vertically in the surface
+            draw_tile(self.cache, cx + CHUNK_SIZE - 1, y -
+                      WORLD_HEIGHT + (CHUNK_SIZE / 2), cz, tinted)
 
     def get_surf(self):
         if self.tiles != self.tiles_old:
@@ -106,33 +122,38 @@ class World:
     # with infinite extension on X and Z axes, WORLD_HEIGHT on Y axis
     def __init__(self, gentype="normal", seed=None,
                  y_multiplier=10, noise_octaves=.1):
+        print(f"[WORLD] Initializing new \"{gentype}\" world...")
         self.chunks = {}
+        self.noise = None
 
         match gentype:
             case "normal":
                 self.noise = PerlinNoise(octaves=noise_octaves, seed=seed)
                 self.y_multiplier = y_multiplier
                 self.seed = self.noise.seed
+                print(f"[WORLD] Seed: {self.seed}")
 
                 for cz in range(-WORLD_INIT_RADIUS, WORLD_INIT_RADIUS):
-                    for cx in range(-WORLD_INIT_RADIUS, 1): #magic number works for some reason
+                    for cx in range(-WORLD_INIT_RADIUS, WORLD_INIT_RADIUS):
                         self.generate_chunk(cx, cz)
             case "axes":
                 self.seed = "Axes Test"
 
                 for x in range(1, 10):
-                    self.set_tile(x=x, tile=SPRITE_TILE_X)
+                    self.set_tile(x=x, tile=SPRITE_TILE_X, gen_empty=True)
                 for y in range(0, 10):
-                    self.set_tile(y=y)
+                    self.set_tile(y=y, gen_empty=True)
                 for z in range(1, 10):
-                    self.set_tile(z=z, tile=SPRITE_TILE_Z)
+                    self.set_tile(z=z, tile=SPRITE_TILE_Z, gen_empty=True)
             case "cube":
                 self.seed = "Cube Test"
 
                 for z in range(-5, 5):
                     for x in range(-5, 5):
                         for y in range(-5, 5):
-                            self.set_tile(x, y, z)
+                            self.set_tile(x, y, z, gen_empty=True)
+
+        print(f"[WORLD] World init done!")
 
     # Get chunk from X and Z world coordinates
     def find_chunk(self, x, z):
@@ -149,32 +170,37 @@ class World:
 
         return chunk.get_tile(x, y, z)
 
-    def set_tile(self, x=0, y=0, z=0, tile=SPRITE_TILE):
+    def set_tile(self, x=0, y=0, z=0, tile=SPRITE_TILE, gen_empty=False):
         chunk = self.find_chunk(x, z)
 
         if chunk:
             chunk.set_tile(x, y, z, tile)
         # TODO gen chunk if needed
+        elif gen_empty:
+            cx, cz = Chunk.convert_coords(Chunk, x, z)
+            self.generate_chunk(cx, cz)
+
+            self.set_tile(x, y, z, tile)  # retry placing the tile
 
     def generate_chunk(self, cx, cz):
-        if not self.find_chunk(cx, cz):
+        if not f"{cx} {cz}" in self.chunks.keys():  # if chunk doesn't already exist
             chunk = self.chunks[f"{cx} {cz}"] = Chunk()
-            print(f"generating {cx} {cz}")
+            
+            if self.noise:
+                print(f"[WORLDGEN] Generating chunk: CX {cx}\tCZ {cz}...")
 
-            for z in range(0, CHUNK_SIZE):
-                # Corresponding world Z
-                wz = WORLD_ORIGIN[1] + z + cz * CHUNK_SIZE
-                
-                for x in range(0, CHUNK_SIZE):
-                    wx = WORLD_ORIGIN[0] + x + cx * CHUNK_SIZE
-                    
-                    y_peak = int(self.noise([wz, wx]) * self.y_multiplier)
+                for z in range(0, CHUNK_SIZE):
+                    # Corresponding world Z
+                    wz = WORLD_ORIGIN[1] + z + cz * CHUNK_SIZE
 
-                    #print(f"CHUNK x{cx} z{cz} | COORDS x{wx} y{y_peak} z{wz}")
+                    for x in range(0, CHUNK_SIZE):
+                        wx = WORLD_ORIGIN[0] + x + cx * CHUNK_SIZE
 
-                    #for actual_y in range(0, y_peak + 5):
-                    for actual_y in range(0, WORLD_HEIGHT):
-                        chunk.set_tile(x, actual_y, z)
+                        y_peak = int(self.noise([wz, wx]) * self.y_multiplier)
+
+                        for actual_y in range(0, clamp_min(y_peak + 5, 1)):
+                            # for actual_y in range(0, WORLD_HEIGHT):
+                            chunk.set_tile(x, actual_y, z)
 
     def draw(self, surf):
         for chunk_coords in self.chunks.keys():
@@ -183,12 +209,10 @@ class World:
 
             c_surf = self.chunks[chunk_coords].get_surf()
             c_srect = c_surf.get_rect()
-            
-            s = 32
-            
+
             draw_pos = (
-                (RENDER_OFFSET[0] + cx * c_srect.width / 2 - cz * c_srect.width / 2),
-                (RENDER_OFFSET[1] + cz * s + cx * s)
+                (RENDER_OFFSET[0] + cx * CHUNK_RENDERX - cz * CHUNK_RENDERX),
+                (RENDER_OFFSET[1] + cz * CHUNK_STAGGER + cx * CHUNK_STAGGER)
             )
 
             surf.blit(c_surf, draw_pos)
