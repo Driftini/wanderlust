@@ -45,9 +45,6 @@ pygame.mouse.set_visible(False)
 clock = pygame.time.Clock()
 frametime = 0
 
-ALREADY_GEN = set()
-
-
 class Chunk:
     # Chunks use chunk coordinates,
     # spanning from 0 to CHUNK_SIZE on the X and Z axes
