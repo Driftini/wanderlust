@@ -136,11 +136,11 @@ class World:
             case "axes":
                 self.seed = "Axes Test"
 
-                for x in range(1, 10):
+                for x in range(0, 10):
                     self.set_tile(x=x, tile=SPRITE_TILE_X, gen_empty=True)
                 for y in range(0, 10):
                     self.set_tile(y=y, gen_empty=True)
-                for z in range(1, 10):
+                for z in range(0, 10):
                     self.set_tile(z=z, tile=SPRITE_TILE_Z, gen_empty=True)
             case "cube":
                 self.seed = "Cube Test"
@@ -172,8 +172,8 @@ class World:
 
         if chunk:
             chunk.set_tile(x, y, z, tile)
-        # TODO gen chunk if needed
         elif gen_empty:
+            # if chunk doesn't exist and gen_empty is set, gen and retry
             cx, cz = Chunk.convert_coords(Chunk, x, z)
             self.generate_chunk(cx, cz)
 
@@ -187,16 +187,20 @@ class World:
                 print(f"[WORLDGEN] Generating chunk: CX {cx}\tCZ {cz}...")
 
                 for z in range(0, CHUNK_SIZE):
-                    # Corresponding world Z
+                    # Calc corresponding world Z
                     wz = WORLD_ORIGIN[1] + z + cz * CHUNK_SIZE
 
                     for x in range(0, CHUNK_SIZE):
+                        # Calc corresponding world X
                         wx = WORLD_ORIGIN[0] + x + cx * CHUNK_SIZE
 
+                        # Peak height for this coordinate
                         y_peak = int(self.noise([wz, wx]) * self.y_multiplier)
+                        
+                        # Clamp minimum height to avoid holes in the world
+                        y_peak = clamp_min(y_peak + 5, 1)
 
-                        for actual_y in range(0, clamp_min(y_peak + 5, 1)):
-                            # for actual_y in range(0, WORLD_HEIGHT):
+                        for actual_y in range(0, y_peak):
                             chunk.set_tile(x, actual_y, z)
 
     def draw(self, surf):
@@ -292,7 +296,7 @@ while True:
         debug_add(f"World seed: {world.seed}")
         debug_add(f"Chunk count: {len(world.chunks)}")
         debug_add(
-            f"World origin: Z {WORLD_ORIGIN[0]}, X {WORLD_ORIGIN[1]}")
+            f"World origin: X {WORLD_ORIGIN[0]}, Z {WORLD_ORIGIN[1]}")
     debug_add(
         f"Rendering offset: {int(RENDER_OFFSET[0])}, {int(RENDER_OFFSET[1])}")
     debug_add("")
