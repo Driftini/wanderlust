@@ -27,9 +27,6 @@ CHUNK_SIZE = 32
 CHUNK_RENDERX = TILE_WIDTH * 2 * CHUNK_SIZE / 2
 CHUNK_STAGGER = CHUNK_SIZE * 4
 
-# uh not a constant
-RENDER_OFFSET = [int(PY_RESOLUTION[0] / 2), int(PY_RESOLUTION[1] / 2)]
-
 # Sprites
 SPRITE_TILE = pygame.image.load("tile.png")
 SPRITE_TILE_X = pygame.image.load("tile_axis_x.png")
@@ -45,8 +42,9 @@ pygame.mouse.set_visible(False)
 clock = pygame.time.Clock()
 frametime = 0
 
+
 class Chunk:
-    # Chunks use chunk coordinates,
+    # Chunks use chunk coordinates (cx cz),
     # spanning from 0 to CHUNK_SIZE on the X and Z axes
     def __init__(self):
         self.tiles = {}
@@ -61,11 +59,10 @@ class Chunk:
                 WORLD_HEIGHT * TILE_HEIGHT + 4
                 # this is an actual mess (+4 is a bandaid fix for an unwanted vertical offset in tile drawing)
             ), flags=SRCALPHA
-            # (1000, 1000), flags=SRCALPHA
         )
 
-    # Convert world coords to chunk coords
     def convert_coords(self, x, z):
+        # Convert world coords to chunk coords
         chunk_x = x % CHUNK_SIZE
         chunk_z = z % CHUNK_SIZE
 
@@ -74,7 +71,7 @@ class Chunk:
     def get_tile(self, x, y, z):
         cx, cz = self.convert_coords(x, z)
 
-        return self.tiles[f"{cx} y {cz}"]
+        return self.tiles[f"{cx} {y} {cz}"]
 
     def set_tile(self, x, y, z, tile=SPRITE_TILE):
         if (0 <= x <= CHUNK_SIZE) and (0 <= y <= WORLD_HEIGHT) and (0 <= z <= CHUNK_SIZE):
@@ -83,7 +80,6 @@ class Chunk:
             self.tiles[f"{cx} {y} {cz}"] = tile
 
     def render_cache(self):
-        # self.cache.fill((0, 0, 0, 10))
         self.cache.fill((0, 0, 0, 0))
 
         for coords in self.tiles.keys():
@@ -107,6 +103,8 @@ class Chunk:
                       WORLD_HEIGHT + (CHUNK_SIZE / 2), cz, tinted)
 
     def get_surf(self):
+        # Render the chunk to its cache surface,
+        # only when there are changes in its tiles
         if self.tiles != self.tiles_old:
             self.render_cache()
             self.tiles_old = self.tiles
@@ -115,7 +113,7 @@ class Chunk:
 
 
 class World:
-    # The world uses world coordinates,
+    # The world uses world coordinates (x y z),
     # with infinite extension on X and Z axes, WORLD_HEIGHT on Y axis
     def __init__(self, gentype="normal", seed=None,
                  y_multiplier=10, noise_octaves=.1):
@@ -152,8 +150,8 @@ class World:
 
         print(f"[WORLD] World init done!")
 
-    # Get chunk from X and Z world coordinates
     def find_chunk(self, x, z):
+        # Returns the chunk from X and Z world coordinates (if any)
         chunk_coords = (math.floor(x / CHUNK_SIZE), math.floor(z / CHUNK_SIZE))
         chunk_key = f"{chunk_coords[0]} {chunk_coords[1]}"
 
@@ -168,23 +166,28 @@ class World:
         return chunk.get_tile(x, y, z)
 
     def set_tile(self, x=0, y=0, z=0, tile=SPRITE_TILE, gen_empty=False):
+        # Places a tile at the given coordinates,
+        # optionally generating the rest of the chunk as well
         chunk = self.find_chunk(x, z)
 
         if chunk:
             chunk.set_tile(x, y, z, tile)
         elif gen_empty:
-            # if chunk doesn't exist and gen_empty is set, gen and retry
+            # If the chunk doesn't exist and gen_empty is set,
+            # generate it and retry
             cx, cz = Chunk.convert_coords(Chunk, x, z)
             self.generate_chunk(cx, cz)
 
             self.set_tile(x, y, z, tile)  # retry placing the tile
 
     def generate_chunk(self, cx, cz):
-        if not f"{cx} {cz}" in self.chunks.keys():  # if chunk doesn't already exist
+        # Generate a new chunk at CX, CZ
+        if not f"{cx} {cz}" in self.chunks.keys():
+            # Only continue if the chunk doesn't already exist
             chunk = self.chunks[f"{cx} {cz}"] = Chunk()
-            
+
             if self.noise:
-                print(f"[WORLDGEN] Generating chunk: CX {cx}\tCZ {cz}...")
+                print(f"[WORLDGEN] Generating chunk: CX {cx},\tCZ {cz}...")
 
                 for z in range(0, CHUNK_SIZE):
                     # Calc corresponding world Z
@@ -196,30 +199,83 @@ class World:
 
                         # Peak height for this coordinate
                         y_peak = int(self.noise([wz, wx]) * self.y_multiplier)
-                        
+
                         # Clamp minimum height to avoid holes in the world
                         y_peak = clamp_min(y_peak + 5, 1)
 
                         for actual_y in range(0, y_peak):
                             chunk.set_tile(x, actual_y, z)
 
-    def draw(self, surf):
+    def get_drawables(self, viewport):
+        # Returns all drawables inside of the viewport
+        drawables = []  # format: (surf, rect)
+
+        # Get drawable chunks
         for chunk_coords in self.chunks.keys():
+            # Get the chunk coords and surface...
             cx, cz = chunk_coords.split(" ")
             cx, cz = int(cx), int(cz)
 
             c_surf = self.chunks[chunk_coords].get_surf()
-            c_srect = c_surf.get_rect()
 
+            # Get the chunk's draw rect...
             draw_pos = (
-                (RENDER_OFFSET[0] + cx * CHUNK_RENDERX - cz * CHUNK_RENDERX),
-                (RENDER_OFFSET[1] + cz * CHUNK_STAGGER + cx * CHUNK_STAGGER)
+                cx * CHUNK_RENDERX - cz * CHUNK_RENDERX,
+                cz * CHUNK_STAGGER + cx * CHUNK_STAGGER
             )
 
-            surf.blit(c_surf, draw_pos)
+            draw_rect = Rect(draw_pos, c_surf.get_size())
+
+            # And check if the chunk is inside the viewport
+            if viewport.colliderect(draw_rect):
+                drawables.append((c_surf, draw_pos))
+
+        return drawables
+
+
+class Camera:
+    def __init__(self, size, world):
+        self.size = size
+        self.world = world
+
+        self.float_pos = [0.0, 0.0]  # for internal calculations
+        self.target_pos = [0.0, 0.0]
+
+    def set_pos(self, pos):
+        # Instant position change
+        self.target_pos = pos
+        self.float_pos = self.target_pos
+
+    def get_viewport(self):
+        # Returns currently visible area
+        return Rect(self.get_pos(), self.size)
+
+    def get_pos(self):
+        # Returns rounded position, for use in actual rendering
+        return (math.floor(self.float_pos[0]), math.floor(self.float_pos[1]))
+
+    def update(self):
+        # Smooth out movement
+        self.float_pos[0] += (self.target_pos[0] - self.float_pos[0]) / 10
+        self.float_pos[1] += (self.target_pos[1] - self.float_pos[1]) / 10
+
+    def draw(self, surf):
+        # Draw all currently visible drawables to a given surface
+
+        drawables = self.world.get_drawables(self.get_viewport())
+
+        for d in drawables:
+            # Apply camera postion to the drawables' rects
+            actual_pos = (d[1][0] - self.get_pos()[0],
+                          d[1][1] - self.get_pos()[1])
+
+            surf.blit(d[0], actual_pos)
+
+###
 
 
 world = World()
+cam = Camera(PY_RESOLUTION, world)
 
 
 def draw_tile(surf, x, y, z, tile):
@@ -255,10 +311,13 @@ while True:
                 m_down = True
             if event.key == K_F1:
                 world = World("normal")
+                cam.world = world  # actually sucks
             if event.key == K_F2:
                 world = World("axes")
+                cam.world = world
             if event.key == K_F3:
                 world = World("cube")
+                cam.world = world
         if event.type == KEYUP:
             if event.key == K_a:
                 m_left = False
@@ -270,16 +329,18 @@ while True:
                 m_down = False
 
     if m_left:
-        RENDER_OFFSET[0] += 5
+        cam.target_pos[0] -= 5
     if m_right:
-        RENDER_OFFSET[0] -= 5
+        cam.target_pos[0] += 5
     if m_up:
-        RENDER_OFFSET[1] += 5
+        cam.target_pos[1] -= 5
     if m_down:
-        RENDER_OFFSET[1] -= 5
+        cam.target_pos[1] += 5
 
-    # Draw to surface
-    world.draw(game_surface)
+    # Draw to screen
+
+    cam.update()
+    cam.draw(game_surface)
 
     game_window.blit(pygame.transform.scale(
         game_surface, PY_SCALED_RES), (0, 0)
@@ -287,20 +348,26 @@ while True:
 
     # Debug overlay
 
+    debug_add("== General ==")
     debug_add(f"FPS: {int(clock.get_fps())}")
     debug_add(f"Frametime: {frametime}ms")
     debug_add("")
 
-    debug_add(f"Tiles count: TODO")
-    if world.seed:
-        debug_add(f"World seed: {world.seed}")
-        debug_add(f"Chunk count: {len(world.chunks)}")
-        debug_add(
-            f"World origin: X {WORLD_ORIGIN[0]}, Z {WORLD_ORIGIN[1]}")
+    debug_add("== World ==")
+    # debug_add(f"Tiles count: TODO")
+    debug_add(f"World seed: {world.seed}")
+    debug_add(f"Chunk count: {len(world.chunks)}")
     debug_add(
-        f"Rendering offset: {int(RENDER_OFFSET[0])}, {int(RENDER_OFFSET[1])}")
+        f"World origin: X {WORLD_ORIGIN[0]}, Z {WORLD_ORIGIN[1]}")
     debug_add("")
 
+    debug_add("== Camera ==")
+    debug_add(f"Camera position: {cam.get_pos()}")
+    debug_add(f"Viewport: {cam.get_viewport()}")
+    debug_add(f"Visible drawables: {len(world.get_drawables(cam.get_viewport()))}")
+    debug_add("")
+
+    debug_add("== Controls ==")
     debug_add("F1: Generate random world")
     debug_add("F2: Generate axes world")
     debug_add("F3: Generate cube world")
