@@ -43,13 +43,57 @@ clock = pygame.time.Clock()
 frametime = 0
 
 
+class Gamestate:
+    def __init__(self):
+        pass
+
+    def update(self, dt=0):
+        pass
+
+    def draw(self, surf):
+        surf.fill("Gray")
+
+
+class StatePlay(Gamestate):
+    def __init__(self):
+        super().__init__()
+
+        # self.surf = pygame.Surface(PY_RESOLUTION)
+        self.world = None
+        self.camera = None
+
+    def update(self, dt=0):
+        # handle input
+        pass
+
+    def draw(self, surf):
+        super().draw(surf)
+
+        if camera and world:
+            self.camera.draw(surf)
+
+    def new_world(self, gentype="normal", seed=None,
+                  y_multiplier=10, noise_octaves=.1):
+        self.world = World(gentype, seed, y_multiplier, noise_octaves)
+        self.camera = Camera(self.world)
+
+    def handle_inputs(self):
+        m_left = False
+        m_right = False
+        m_up = False
+        m_down = False
+
+        # left off here
+
+
 class Chunk:
     # Chunks use chunk coordinates (cx cz),
     # spanning from 0 to CHUNK_SIZE on the X and Z axes
     def __init__(self):
         self.tiles = {}
 
-        # it has to be different from self.tiles, else it never renders to cache
+        # it has to be different from self.tiles,
+        # else it never renders to cache
         self.tiles_old = None
 
         self.cache = pygame.Surface(
@@ -57,7 +101,8 @@ class Chunk:
                 TILE_WIDTH * 2 * CHUNK_SIZE,
                 (CHUNK_SIZE * TILE_STAGGER) * 2 +
                 WORLD_HEIGHT * TILE_HEIGHT + 4
-                # this is an actual mess (+4 is a bandaid fix for an unwanted vertical offset in tile drawing)
+                # this is an actual mess (+4 is a bandaid fix for
+                # an unwanted vertical offset in tile drawing)
             ), flags=SRCALPHA
         )
 
@@ -99,8 +144,10 @@ class Chunk:
 
             # cx is altered to center the chunk in the surface
             # y is altered to make the whole chunk fit vertically in the surface
-            draw_tile(self.cache, cx + CHUNK_SIZE - 1, y -
-                      WORLD_HEIGHT + (CHUNK_SIZE / 2), cz, tinted)
+            draw_tile(self.cache,
+                      cx + CHUNK_SIZE - 1, y -
+                      WORLD_HEIGHT + (CHUNK_SIZE / 2), cz,
+                      tinted)
 
     def get_surf(self):
         # Render the chunk to its cache surface,
@@ -182,7 +229,7 @@ class World:
 
     def generate_chunk(self, cx, cz):
         # Generate a new chunk at CX, CZ
-        if not f"{cx} {cz}" in self.chunks.keys():
+        if f"{cx} {cz}" not in self.chunks.keys():
             # Only continue if the chunk doesn't already exist
             chunk = self.chunks[f"{cx} {cz}"] = Chunk()
 
@@ -261,7 +308,6 @@ class Camera:
 
     def draw(self, surf):
         # Draw all currently visible drawables to a given surface
-
         drawables = self.world.get_drawables(self.get_viewport())
 
         for d in drawables:
@@ -364,7 +410,8 @@ while True:
     debug_add("== Camera ==")
     debug_add(f"Camera position: {cam.get_pos()}")
     debug_add(f"Viewport: {cam.get_viewport()}")
-    debug_add(f"Visible drawables: {len(world.get_drawables(cam.get_viewport()))}")
+    debug_add(
+        f"Visible drawables: {len(world.get_drawables(cam.get_viewport()))}")
     debug_add("")
 
     debug_add("== Controls ==")
