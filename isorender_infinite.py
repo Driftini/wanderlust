@@ -45,7 +45,15 @@ frametime = 0
 
 class Gamestate:
     def __init__(self):
-        pass
+        self.input = {
+            "up": False,
+            "down": False,
+            "left": False,
+            "right": False,
+            "f1": False,
+            "f2": False,
+            "f3": False
+        }
 
     def update(self, dt=0):
         pass
@@ -58,32 +66,93 @@ class StatePlay(Gamestate):
     def __init__(self):
         super().__init__()
 
-        # self.surf = pygame.Surface(PY_RESOLUTION)
+        # ugh
         self.world = None
         self.camera = None
 
+        self.m_left = False
+        self.m_right = False
+        self.m_up = False
+        self.m_down = False
+
     def update(self, dt=0):
-        # handle input
-        pass
+        self.handle_input()
+
+        if self.m_left:
+            self.camera.target_pos[0] -= 5
+        if self.m_right:
+            self.camera.target_pos[0] += 5
+        if self.m_up:
+            self.camera.target_pos[1] -= 5
+        if self.m_down:
+            self.camera.target_pos[1] += 5
+
+        self.camera.update()
+
+        self.add_debug_overlay()
 
     def draw(self, surf):
         super().draw(surf)
 
-        if camera and world:
+        if self.camera and self.world:
             self.camera.draw(surf)
 
     def new_world(self, gentype="normal", seed=None,
                   y_multiplier=10, noise_octaves=.1):
         self.world = World(gentype, seed, y_multiplier, noise_octaves)
-        self.camera = Camera(self.world)
+        self.camera = Camera(PY_RESOLUTION, self.world)
 
-    def handle_inputs(self):
-        m_left = False
-        m_right = False
-        m_up = False
-        m_down = False
+    def handle_input(self):  # TODO do it outside of here
 
-        # left off here
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_a:
+                    self.m_left = True
+                if event.key == K_d:
+                    self.m_right = True
+                if event.key == K_w:
+                    self.m_up = True
+                if event.key == K_s:
+                    self.m_down = True
+                if event.key == K_F1:
+                    self.new_world("normal")
+                if event.key == K_F2:
+                    self.new_world("axes")
+                if event.key == K_F3:
+                    self.new_world("cube")
+            if event.type == KEYUP:
+                if event.key == K_a:
+                    self.m_left = False
+                if event.key == K_d:
+                    self.m_right = False
+                if event.key == K_w:
+                    self.m_up = False
+                if event.key == K_s:
+                    self.m_down = False
+
+    def add_debug_overlay(self):
+        debug_add("== World ==")
+        # debug_add(f"Tiles count: TODO")
+        debug_add(f"World seed: {self.world.seed}")
+        debug_add(f"Chunk count: {len(self.world.chunks)}")
+        debug_add(
+            f"World origin: X {WORLD_ORIGIN[0]}, Z {WORLD_ORIGIN[1]}")
+        debug_add("")
+
+        debug_add("== Camera ==")
+        debug_add(f"Camera position: {self.camera.get_pos()}")
+        debug_add(f"Viewport: {self.camera.get_viewport()}")
+        debug_add(
+            f"Visible drawables: {len(self.world.get_drawables(self.camera.get_viewport()))}")
+        debug_add("")
+
+        debug_add("== Controls ==")
+        debug_add("F1: Generate random world")
+        debug_add("F2: Generate axes world")
+        debug_add("F3: Generate cube world")
 
 
 class Chunk:
@@ -142,8 +211,9 @@ class Chunk:
             tinted.fill((shadow, shadow, shadow, 255),
                         special_flags=pygame.BLEND_MULT)
 
-            # cx is altered to center the chunk in the surface
-            # y is altered to make the whole chunk fit vertically in the surface
+            # cx is altered to center the chunk in the surface,
+            # y is altered to make the whole chunk
+            # fit vertically in the surface
             draw_tile(self.cache,
                       cx + CHUNK_SIZE - 1, y -
                       WORLD_HEIGHT + (CHUNK_SIZE / 2), cz,
@@ -303,8 +373,9 @@ class Camera:
 
     def update(self):
         # Smooth out movement
-        self.float_pos[0] += (self.target_pos[0] - self.float_pos[0]) / 10
-        self.float_pos[1] += (self.target_pos[1] - self.float_pos[1]) / 10
+        if self.float_pos != self.target_pos:
+            self.float_pos[0] += (self.target_pos[0] - self.float_pos[0]) / 10
+            self.float_pos[1] += (self.target_pos[1] - self.float_pos[1]) / 10
 
     def draw(self, surf):
         # Draw all currently visible drawables to a given surface
@@ -320,10 +391,6 @@ class Camera:
 ###
 
 
-world = World()
-cam = Camera(PY_RESOLUTION, world)
-
-
 def draw_tile(surf, x, y, z, tile):
     surf.blit(tile, (
         (x * TILE_WIDTH - z * TILE_WIDTH),
@@ -331,95 +398,31 @@ def draw_tile(surf, x, y, z, tile):
     ))
 
 
-m_left = False
-m_right = False
-m_up = False
-m_down = False
+gamestates = {
+    "play": StatePlay(),
+    # "menu": StateMenu()
+}
+
+current_gamestate = gamestates["play"]
+current_gamestate.new_world()
 
 # Gameloop
 while True:
-    game_surface.fill((200, 160, 160))
     debug_clear()
-
-    # Event handling
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            sys.exit()
-        if event.type == KEYDOWN:
-            if event.key == K_a:
-                m_left = True
-            if event.key == K_d:
-                m_right = True
-            if event.key == K_w:
-                m_up = True
-            if event.key == K_s:
-                m_down = True
-            if event.key == K_F1:
-                world = World("normal")
-                cam.world = world  # actually sucks
-            if event.key == K_F2:
-                world = World("axes")
-                cam.world = world
-            if event.key == K_F3:
-                world = World("cube")
-                cam.world = world
-        if event.type == KEYUP:
-            if event.key == K_a:
-                m_left = False
-            if event.key == K_d:
-                m_right = False
-            if event.key == K_w:
-                m_up = False
-            if event.key == K_s:
-                m_down = False
-
-    if m_left:
-        cam.target_pos[0] -= 5
-    if m_right:
-        cam.target_pos[0] += 5
-    if m_up:
-        cam.target_pos[1] -= 5
-    if m_down:
-        cam.target_pos[1] += 5
-
-    # Draw to screen
-
-    cam.update()
-    cam.draw(game_surface)
-
-    game_window.blit(pygame.transform.scale(
-        game_surface, PY_SCALED_RES), (0, 0)
-    )
-
-    # Debug overlay
 
     debug_add("== General ==")
     debug_add(f"FPS: {int(clock.get_fps())}")
     debug_add(f"Frametime: {frametime}ms")
     debug_add("")
 
-    debug_add("== World ==")
-    # debug_add(f"Tiles count: TODO")
-    debug_add(f"World seed: {world.seed}")
-    debug_add(f"Chunk count: {len(world.chunks)}")
-    debug_add(
-        f"World origin: X {WORLD_ORIGIN[0]}, Z {WORLD_ORIGIN[1]}")
-    debug_add("")
+    current_gamestate.update()
+    current_gamestate.draw(game_surface)
 
-    debug_add("== Camera ==")
-    debug_add(f"Camera position: {cam.get_pos()}")
-    debug_add(f"Viewport: {cam.get_viewport()}")
-    debug_add(
-        f"Visible drawables: {len(world.get_drawables(cam.get_viewport()))}")
-    debug_add("")
+    game_window.blit(pygame.transform.scale(
+        game_surface, PY_SCALED_RES), (0, 0)
+    )
 
-    debug_add("== Controls ==")
-    debug_add("F1: Generate random world")
-    debug_add("F2: Generate axes world")
-    debug_add("F3: Generate cube world")
-
-    # Draw surface to window
     debug_draw()
+
     pygame.display.update()
     frametime = clock.tick(PY_TARGET_FPS)
