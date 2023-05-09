@@ -1,5 +1,6 @@
 import pygame
 import sys
+import time
 from perlin_noise import PerlinNoise
 from pygame.locals import *
 from utils import *
@@ -32,8 +33,19 @@ SPRITE_TILE = pygame.image.load("tile.png")
 SPRITE_TILE_X = pygame.image.load("tile_axis_x.png")
 SPRITE_TILE_Z = pygame.image.load("tile_axis_z.png")
 
+# Debugging timers
+enable_timers = True  # bad name
+debug_timers = {
+    "last_worldgen": 0,
+    "chunkcache_avg": 0,
+    "chunkcache_max": 0,
+    "chunkdraw_avg": 0,
+    "chunkdraw_max": 0,
+}
+
+
 # Pygame preconfig
-pygame.init()
+pygame.init()  # Pygame is already initialized in utils, this is useless
 pygame.display.set_caption(PY_TITLE)
 game_window = pygame.display.set_mode(PY_SCALED_RES, 0, 32, 0, 1)
 game_surface = pygame.Surface(PY_RESOLUTION)
@@ -42,18 +54,64 @@ pygame.mouse.set_visible(False)
 clock = pygame.time.Clock()
 frametime = 0
 
+# Controls stuff (ugly but works)
+
+
+class Control:
+    def __init__(self, key, repeat, description=""):
+        self.key = key
+        self.repeat = repeat
+        self.description = description
+
+        self.state = False
+        self.last_state = False
+
+
+controls = {
+    # Dynamic control scheme
+
+    "left": Control(K_a, True),
+    "right": Control(K_d, True),
+    "up": Control(K_w, True),
+    "down": Control(K_s, True),
+
+    "dbg_genworld": Control(K_F1, False, "Generate random world"),
+    "dbg_genaxes": Control(K_F2, False, "Generate axes world"),
+    "dbg_gencube": Control(K_F3, False, "Generate cube world"),
+    "dbg_toggletimers": Control(K_F4, False, "Toggle debug timers (DISABLED)"),
+}
+
+
+def set_control(action, new_state):
+    if controls[action].repeat:
+        controls[action].state = new_state
+    else:
+        if controls[action].last_state:
+            controls[action].state = False
+        else:
+            controls[action].state = new_state
+
+        controls[action].last_state = new_state
+
+
+def get_control(action):
+    return controls[action].state
+
+
+def update_controls():
+    pressed_keys = pygame.key.get_pressed()
+
+    for action in controls.keys():
+        # Is the action key being pressed?
+        if pressed_keys[controls[action].key]:
+            set_control(action, True)
+        else:
+            set_control(action, False)
+
 
 class Gamestate:
     def __init__(self):
-        self.input = {
-            "up": False,
-            "down": False,
-            "left": False,
-            "right": False,
-            "f1": False,
-            "f2": False,
-            "f3": False
-        }
+        pass
 
     def update(self, dt=0):
         pass
@@ -70,22 +128,24 @@ class StatePlay(Gamestate):
         self.world = None
         self.camera = None
 
-        self.m_left = False
-        self.m_right = False
-        self.m_up = False
-        self.m_down = False
-
     def update(self, dt=0):
-        self.handle_input()
-
-        if self.m_left:
+        if get_control("left"):
             self.camera.target_pos[0] -= 5
-        if self.m_right:
+        if get_control("right"):
             self.camera.target_pos[0] += 5
-        if self.m_up:
+        if get_control("up"):
             self.camera.target_pos[1] -= 5
-        if self.m_down:
+        if get_control("down"):
             self.camera.target_pos[1] += 5
+
+        if get_control("dbg_genworld"):
+            self.new_world("normal")
+        if get_control("dbg_genaxes"):
+            self.new_world("axes")
+        if get_control("dbg_gencube"):
+            self.new_world("cube")
+        # if get_control("dbg_toggletimers"):
+        #     enable_timers = not enable_timers
 
         self.camera.update()
 
@@ -95,51 +155,42 @@ class StatePlay(Gamestate):
         super().draw(surf)
 
         if self.camera and self.world:
+            if enable_timers:
+                start_time = time.time()
+
             self.camera.draw(surf)
+
+            if enable_timers:
+                total_time = time.time() - start_time
+                debug_timers["chunkdraw_avg"] += total_time
+                debug_timers["chunkdraw_avg"] /= 2
+
+                debug_timers["chunkdraw_max"] = max(
+                    debug_timers["chunkdraw_max"], total_time
+                )
 
     def new_world(self, gentype="normal", seed=None,
                   y_multiplier=10, noise_octaves=.1):
+        if enable_timers:
+            start_time = time.time()
+
         self.world = World(gentype, seed, y_multiplier, noise_octaves)
         self.camera = Camera(PY_RESOLUTION, self.world)
 
-    def handle_input(self):  # TODO do it outside of here
-
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == KEYDOWN:
-                if event.key == K_a:
-                    self.m_left = True
-                if event.key == K_d:
-                    self.m_right = True
-                if event.key == K_w:
-                    self.m_up = True
-                if event.key == K_s:
-                    self.m_down = True
-                if event.key == K_F1:
-                    self.new_world("normal")
-                if event.key == K_F2:
-                    self.new_world("axes")
-                if event.key == K_F3:
-                    self.new_world("cube")
-            if event.type == KEYUP:
-                if event.key == K_a:
-                    self.m_left = False
-                if event.key == K_d:
-                    self.m_right = False
-                if event.key == K_w:
-                    self.m_up = False
-                if event.key == K_s:
-                    self.m_down = False
+        if enable_timers:
+            total_time = time.time() - start_time
+            debug_timers["last_worldgen"] = total_time
 
     def add_debug_overlay(self):
         debug_add("== World ==")
         # debug_add(f"Tiles count: TODO")
-        debug_add(f"World seed: {self.world.seed}")
-        debug_add(f"Chunk count: {len(self.world.chunks)}")
+        debug_add(f"Seed: {self.world.seed}")
         debug_add(
-            f"World origin: X {WORLD_ORIGIN[0]}, Z {WORLD_ORIGIN[1]}")
+            f"Origin: X {WORLD_ORIGIN[0]}, Z {WORLD_ORIGIN[1]}"
+        )
+        debug_add(f"Initial generation radius: {WORLD_INIT_RADIUS}")
+        debug_add(f"Chunk count: {len(self.world.chunks)}")
+
         debug_add("")
 
         debug_add("== Camera ==")
@@ -150,9 +201,30 @@ class StatePlay(Gamestate):
         debug_add("")
 
         debug_add("== Controls ==")
-        debug_add("F1: Generate random world")
-        debug_add("F2: Generate axes world")
-        debug_add("F3: Generate cube world")
+        for action in controls.keys():
+            if len(controls[action].description) > 0:
+                key = pygame.key.name(controls[action].key)[:2].capitalize()
+                debug_add(f"{key}: {controls[action].description}")
+        debug_add("")
+
+        if enable_timers:
+            self.add_timers_overlay()
+
+    def add_timers_overlay(self):
+        debug_add("== Timers ==")
+        last_wg = int(debug_timers['last_worldgen'] * 1000)
+        debug_add(
+            f"Last world generation: {last_wg}ms")
+
+        cc_avg = int(debug_timers["chunkcache_avg"] * 1000)
+        cc_max = int(debug_timers["chunkcache_max"] * 1000)
+        debug_add(f"Chunk caching: avg {cc_avg}ms, max {cc_max}ms")
+
+        cd_avg = int(debug_timers["chunkdraw_avg"] * 1000)
+        cd_max = int(debug_timers["chunkdraw_max"] * 1000)
+        debug_add(f"Chunk drawing: avg {cd_avg}ms, max {cd_max}ms")
+
+        debug_add("")
 
 
 class Chunk:
@@ -194,6 +266,9 @@ class Chunk:
             self.tiles[f"{cx} {y} {cz}"] = tile
 
     def render_cache(self):
+        if enable_timers:
+            start_time = time.time()
+
         self.cache.fill((0, 0, 0, 0))
 
         for coords in self.tiles.keys():
@@ -218,6 +293,15 @@ class Chunk:
                       cx + CHUNK_SIZE - 1, y -
                       WORLD_HEIGHT + (CHUNK_SIZE / 2), cz,
                       tinted)
+
+        if enable_timers:
+            total_time = time.time() - start_time
+            debug_timers["chunkcache_avg"] += total_time
+            debug_timers["chunkcache_avg"] /= 2
+
+            debug_timers["chunkcache_max"] = max(
+                debug_timers["chunkcache_max"], total_time
+            )
 
     def get_surf(self):
         # Render the chunk to its cache surface,
@@ -245,6 +329,7 @@ class World:
                 self.seed = self.noise.seed
                 print(f"[WORLD] Seed: {self.seed}")
 
+                # Generate chunks within the initial generation radius
                 for cz in range(-WORLD_INIT_RADIUS, WORLD_INIT_RADIUS):
                     for cx in range(-WORLD_INIT_RADIUS, WORLD_INIT_RADIUS):
                         self.generate_chunk(cx, cz)
@@ -408,6 +493,11 @@ current_gamestate.new_world()
 
 # Gameloop
 while True:
+    for event in pygame.event.get():  # this is NOT a control
+        if event.type == QUIT:
+            pygame.quit()
+            sys.exit()
+
     debug_clear()
 
     debug_add("== General ==")
@@ -415,6 +505,7 @@ while True:
     debug_add(f"Frametime: {frametime}ms")
     debug_add("")
 
+    update_controls()
     current_gamestate.update()
     current_gamestate.draw(game_surface)
 
