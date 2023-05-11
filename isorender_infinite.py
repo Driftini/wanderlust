@@ -21,6 +21,7 @@ TILE_STAGGER = 4
 WORLD_ORIGIN = (int(0), int(0))  # x, z
 WORLD_HEIGHT = 50
 WORLD_INIT_RADIUS = 2  # Chunk generation radius on world init
+WORLD_PRECACHE_CHUNKS = True
 
 # Chunk constants
 CHUNK_SIZE = 32
@@ -47,7 +48,7 @@ debug_timers = {
 # Pygame preconfig
 pygame.init()  # Pygame is already initialized in utils, this is useless
 pygame.display.set_caption(PY_TITLE)
-game_window = pygame.display.set_mode(PY_SCALED_RES, 0, 32, 0, 1)
+game_window = pygame.display.set_mode(PY_SCALED_RES, vsync=1)
 game_surface = pygame.Surface(PY_RESOLUTION)
 pygame.mouse.set_visible(False)
 
@@ -101,7 +102,7 @@ def get_control(action):
 def update_controls():
     pressed_keys = pygame.key.get_pressed()
 
-    for action in controls.keys():
+    for action in controls:
         # Is the action key being pressed?
         if pressed_keys[controls[action].key]:
             set_control(action, True)
@@ -190,6 +191,7 @@ class StatePlay(Gamestate):
         )
         debug_add(f"Initial generation radius: {WORLD_INIT_RADIUS}")
         debug_add(f"Chunk count: {len(self.world.chunks)}")
+        debug_add(f"Chunk precaching: {WORLD_PRECACHE_CHUNKS}")
 
         debug_add("")
 
@@ -201,7 +203,7 @@ class StatePlay(Gamestate):
         debug_add("")
 
         debug_add("== Controls ==")
-        for action in controls.keys():
+        for action in controls:
             if len(controls[action].description) > 0:
                 key = pygame.key.name(controls[action].key)[:2].capitalize()
                 debug_add(f"{key}: {controls[action].description}")
@@ -271,7 +273,7 @@ class Chunk:
 
         self.cache.fill((0, 0, 0, 0))
 
-        for coords in self.tiles.keys():
+        for coords in self.tiles:
             cx, y, cz = coords.split(" ")
             cx, y, cz = int(cx), int(y), int(cz)
 
@@ -312,6 +314,9 @@ class Chunk:
 
         return self.cache
 
+    def get_surf_size(self):
+        return self.cache.get_size()
+
 
 class World:
     # The world uses world coordinates (x y z),
@@ -350,6 +355,10 @@ class World:
                         for y in range(-5, 5):
                             self.set_tile(x, y, z, gen_empty=True)
 
+        if WORLD_PRECACHE_CHUNKS:
+            for chunk_coords in self.chunks:
+                self.chunks[chunk_coords].get_surf()
+
         print(f"[WORLD] World init done!")
 
     def find_chunk(self, x, z):
@@ -357,7 +366,7 @@ class World:
         chunk_coords = (math.floor(x / CHUNK_SIZE), math.floor(z / CHUNK_SIZE))
         chunk_key = f"{chunk_coords[0]} {chunk_coords[1]}"
 
-        if chunk_key in self.chunks.keys():
+        if chunk_key in self.chunks:
             return self.chunks[chunk_key]
         else:
             return False  # maybe unnecessary
@@ -384,7 +393,7 @@ class World:
 
     def generate_chunk(self, cx, cz):
         # Generate a new chunk at CX, CZ
-        if f"{cx} {cz}" not in self.chunks.keys():
+        if f"{cx} {cz}" not in self.chunks:
             # Only continue if the chunk doesn't already exist
             chunk = self.chunks[f"{cx} {cz}"] = Chunk()
 
@@ -413,23 +422,24 @@ class World:
         drawables = []  # format: (surf, rect)
 
         # Get drawable chunks
-        for chunk_coords in self.chunks.keys():
+        for chunk_coords in self.chunks:
             # Get the chunk coords and surface...
             cx, cz = chunk_coords.split(" ")
             cx, cz = int(cx), int(cz)
 
-            c_surf = self.chunks[chunk_coords].get_surf()
+            c_surf_size = self.chunks[chunk_coords].get_surf_size()
 
-            # Get the chunk's draw rect...
+            # Calculate the chunk's draw rect...
             draw_pos = (
                 cx * CHUNK_RENDERX - cz * CHUNK_RENDERX,
                 cz * CHUNK_STAGGER + cx * CHUNK_STAGGER
             )
 
-            draw_rect = Rect(draw_pos, c_surf.get_size())
+            draw_rect = Rect(draw_pos, c_surf_size)
 
             # And check if the chunk is inside the viewport
             if viewport.colliderect(draw_rect):
+                c_surf = self.chunks[chunk_coords].get_surf()
                 drawables.append((c_surf, draw_pos))
 
         return drawables
