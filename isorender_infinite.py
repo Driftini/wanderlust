@@ -150,7 +150,7 @@ class StatePlay(Gamestate):
 
         self.camera.update()
 
-        self.add_debug_overlay()
+        #self.add_debug_overlay()
 
     def draw(self, surf):
         super().draw(surf)
@@ -485,7 +485,7 @@ class Camera:
 
 
 class Cube(pygame.FRect):
-    def __init__(self, pos=[0.0,0.0,0.0], size=[1,1,1]):
+    def __init__(self, pos=[0.0, 0.0, 0.0], size=[1, 1, 1]):
         # The FRect properties are used for the X and Z coordinates
         super().__init__(pos[0], pos[2], size[0], size[2])
 
@@ -500,7 +500,7 @@ class Cube(pygame.FRect):
 
 
 class Thing:
-    def __init__(self, pos=[0.0,0.0,0.0], size=[1,1,1]):
+    def __init__(self, pos=[0.0, 0.0, 0.0], size=[1, 1, 1]):
         self.pos = pos
         self.size = size
 
@@ -509,17 +509,49 @@ class Thing:
 
         self.velocity = pygame.Vector3()
 
-    def update(self):
+    def update(self, dt=0):
         self.pos[0] += self.velocity.x
         self.pos[1] += self.velocity.y
         self.pos[2] += self.velocity.z
 
-        # TODO clear
+        # TODO clear velocity
+        self.velocity.update()
+
+        self.cube.pos = self.pos
 
     def draw(self):
         pass
 
+
+class Mover(Thing):
+    def __init__(self, pos=[0.0, 0.0, 0.0]):
+        super().__init__(pos)
+
+        self.size = [TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH]
+
+    def update(self, dt=0):
+        super().update(dt)
+
+        if get_control("left"):
+            self.velocity.x -= 1
+        if get_control("right"):
+            self.velocity.x += 1
+        if get_control("up"):
+            self.velocity.z -= 1
+        if get_control("down"):
+            self.velocity.z += 1
+
 ###
+
+
+def draw_isometric(surf, x, y, z, sprite):
+    surf.blit(sprite, (
+        (x - z),
+        (z * 1 + x * 1 - y)
+    ))
+
+    debug_add(x-z)
+    debug_add(z+x-y)
 
 
 def draw_tile(surf, x, y, z, tile):
@@ -536,6 +568,8 @@ gamestates = {
 
 current_gamestate = gamestates["play"]
 current_gamestate.new_world()
+
+ent = Mover([5,5,5])
 
 # Gameloop
 while True:
@@ -554,6 +588,9 @@ while True:
     update_controls()
     current_gamestate.update()
     current_gamestate.draw(game_surface)
+
+    draw_isometric(game_surface, ent.pos[0], ent.pos[1], ent.pos[2], SPRITE_TILE_X)
+    ent.update()
 
     game_window.blit(pygame.transform.scale(
         game_surface, PY_SCALED_RES), (0, 0)
