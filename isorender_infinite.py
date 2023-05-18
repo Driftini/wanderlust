@@ -7,7 +7,7 @@ from utils import *
 
 # Pygame config constants
 PY_RESOLUTION = (640, 360)
-PY_SCALE = 2
+PY_SCALE = 1
 PY_SCALED_RES = (PY_RESOLUTION[0] * PY_SCALE, PY_RESOLUTION[1] * PY_SCALE)
 PY_TARGET_FPS = 75
 PY_TITLE = "Isometric world renderer thing"
@@ -482,6 +482,42 @@ class Camera:
                           d[1][1] - self.get_pos()[1])
 
             surf.blit(d[0], actual_pos)
+
+
+class Cube(pygame.FRect):
+    def __init__(self, pos=[0.0,0.0,0.0], size=[1,1,1]):
+        # The FRect properties are used for the X and Z coordinates
+        super().__init__(pos[0], pos[2], size[0], size[2])
+
+        self.pos_y = pos[1]
+        self.size_y = size[1]
+
+    def collidecube(self, cube):
+        if cube.pos_y < self.pos_y < self.size_y:
+            super().colliderect(cube)
+        else:
+            return False
+
+
+class Thing:
+    def __init__(self, pos=[0.0,0.0,0.0], size=[1,1,1]):
+        self.pos = pos
+        self.size = size
+
+        # ONLY for internal usage, don't edit directly
+        self.cube = Cube(pos, size)
+
+        self.velocity = pygame.Vector3()
+
+    def update(self):
+        self.pos[0] += self.velocity.x
+        self.pos[1] += self.velocity.y
+        self.pos[2] += self.velocity.z
+
+        # TODO clear
+
+    def draw(self):
+        pass
 
 ###
 
