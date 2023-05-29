@@ -7,7 +7,7 @@ from utils import *
 
 # Pygame config constants
 PY_RESOLUTION = (640, 360)
-PY_SCALE = 1
+PY_SCALE = 2
 PY_SCALED_RES = (PY_RESOLUTION[0] * PY_SCALE, PY_RESOLUTION[1] * PY_SCALE)
 PY_TARGET_FPS = 75
 PY_TITLE = "Isometric world renderer thing"
@@ -79,7 +79,8 @@ controls = {
     "dbg_genworld": Control(K_F1, False, "Generate random world"),
     "dbg_genaxes": Control(K_F2, False, "Generate axes world"),
     "dbg_gencube": Control(K_F3, False, "Generate cube world"),
-    "dbg_toggletimers": Control(K_F4, False, "Toggle debug timers (DISABLED)"),
+    "dbg_gengrid": Control(K_F4, False, "Generate grid world"),
+    "dbg_toggletimers": Control(K_F12, False, "Toggle debug timers (DISABLED)"),
 }
 
 
@@ -129,15 +130,31 @@ class StatePlay(Gamestate):
         self.world = None
         self.camera = None
 
+        # store entities in world or gamestate??
+
     def update(self, dt=0):
-        if get_control("left"):
-            self.camera.target_pos[0] -= 5
-        if get_control("right"):
-            self.camera.target_pos[0] += 5
-        if get_control("up"):
-            self.camera.target_pos[1] -= 5
-        if get_control("down"):
-            self.camera.target_pos[1] += 5
+        self.handle_input()
+
+        self.world.update_loaded_chunks()
+        self.world.update_loaded_entities()
+
+        self.world.update_entities(dt)
+
+        self.camera.set_target(self.world.entities[0].cube.center)
+
+        self.camera.update()
+
+        self.add_debug_overlay()
+
+    def handle_input(self):
+        # if get_control("left"):
+        #     self.camera.target_pos[0] -= 5
+        # if get_control("right"):
+        #     self.camera.target_pos[0] += 5
+        # if get_control("up"):
+        #     self.camera.target_pos[1] -= 5
+        # if get_control("down"):
+        #     self.camera.target_pos[1] += 5
 
         if get_control("dbg_genworld"):
             self.new_world("normal")
@@ -145,12 +162,10 @@ class StatePlay(Gamestate):
             self.new_world("axes")
         if get_control("dbg_gencube"):
             self.new_world("cube")
+        if get_control("dbg_gengrid"):
+            self.new_world("grid")
         # if get_control("dbg_toggletimers"):
         #     enable_timers = not enable_timers
-
-        self.camera.update()
-
-        #self.add_debug_overlay()
 
     def draw(self, surf):
         super().draw(surf)
@@ -181,6 +196,10 @@ class StatePlay(Gamestate):
         if enable_timers:
             total_time = time.time() - start_time
             debug_timers["last_worldgen"] = total_time
+
+        self.world.entities.append(
+            Mover([0, 1, 0])
+        )
 
     def add_debug_overlay(self):
         debug_add("== World ==")
@@ -271,7 +290,7 @@ class Chunk:
         if enable_timers:
             start_time = time.time()
 
-        self.cache.fill((0, 0, 0, 0))
+        self.cache.fill((0, 0, 0, 20))
 
         for coords in self.tiles:
             cx, y, cz = coords.split(" ")
@@ -327,6 +346,13 @@ class World:
         self.chunks = {}
         self.noise = None
 
+        self.entities = []
+        self.tile_colliders = []  # ?
+
+        self.loaded_chunks = {}
+        self.loaded_entities = []
+        self.tile_colliders_loaded = []  # ?
+
         match gentype:
             case "normal":
                 self.noise = PerlinNoise(octaves=noise_octaves, seed=seed)
@@ -354,6 +380,13 @@ class World:
                     for x in range(-5, 5):
                         for y in range(-5, 5):
                             self.set_tile(x, y, z, gen_empty=True)
+            case "grid":
+                self.seed = "Grid test"
+
+                for x in range(-10, 10):
+                    for z in range(-10, 10):
+                        if x % 2 != 0:
+                            self.set_tile(x=x, z=z, tile=SPRITE_TILE_Z, gen_empty=True)
 
         if WORLD_PRECACHE_CHUNKS:
             for chunk_coords in self.chunks:
@@ -361,13 +394,17 @@ class World:
 
         print(f"[WORLD] World init done!")
 
+    # Chunk & tile methods
+
+    def get_chunk_id(self, x, z):
+        return f"{math.floor(x / CHUNK_SIZE)} {math.floor(z / CHUNK_SIZE)}"
+
     def find_chunk(self, x, z):
         # Returns the chunk from X and Z world coordinates (if any)
-        chunk_coords = (math.floor(x / CHUNK_SIZE), math.floor(z / CHUNK_SIZE))
-        chunk_key = f"{chunk_coords[0]} {chunk_coords[1]}"
+        chunk_id = self.get_chunk_id(x, z)
 
-        if chunk_key in self.chunks:
-            return self.chunks[chunk_key]
+        if chunk_id in self.chunks:
+            return self.chunks[chunk_id]
         else:
             return False  # maybe unnecessary
 
@@ -417,6 +454,35 @@ class World:
                         for actual_y in range(0, y_peak):
                             chunk.set_tile(x, actual_y, z)
 
+    def update_loaded_chunks(self):
+        # Update the list of loaded chunks
+        self.loaded_chunks.clear()
+
+        # temporary
+        for chunk in self.chunks:
+            # TODO make it based on a radius around player position
+            self.loaded_chunks[chunk] = self.chunks[chunk]
+
+    # Entity methods
+
+    def update_loaded_entities(self):
+        # Update the list of loaded entities
+        self.loaded_entities.clear()
+
+        # temporary
+        for entity in self.entities:
+            # Check if entity is in a loaded chunk
+            if self.get_chunk_id(entity.pos.x, entity.pos.z) in self.loaded_chunks:
+                self.loaded_entities.append(entity)
+
+    def update_entities(self, dt=0):
+        # Call every loaded entity's update method
+        # for entity in self.loaded_entities:
+        for entity in self.entities:
+            entity.update(dt)
+
+    # Rendering methods
+
     def get_drawables(self, viewport):
         # Returns all drawables inside of the viewport
         drawables = []  # format: (surf, rect)
@@ -442,6 +508,17 @@ class World:
                 c_surf = self.chunks[chunk_coords].get_surf()
                 drawables.append((c_surf, draw_pos))
 
+        # Get drawable entities
+        # for entity in self.loaded_entities:
+        for entity in self.entities:
+            # TODO viewport checks
+
+            # rs = pygame.Surface((20,20))
+
+            # pygame.draw.rect(rs, "Red", Rect(entity.pos.xz, (20,20)))
+            # drawables.append((rs, entity.pos.xz))
+            drawables.append((entity.sprite, entity.pos.xz))
+
         return drawables
 
 
@@ -452,6 +529,11 @@ class Camera:
 
         self.float_pos = [0.0, 0.0]  # for internal calculations
         self.target_pos = [0.0, 0.0]
+
+    def set_target(self, pos):
+        # Target position while centering it on screen
+        self.target_pos[0] = pos[0] - PY_RESOLUTION[0] / 2
+        self.target_pos[1] = pos[1] - PY_RESOLUTION[1] / 2
 
     def set_pos(self, pos):
         # Instant position change
@@ -499,31 +581,28 @@ class Cube(pygame.FRect):
             return False
 
 
-class Thing:
+class Entity:
     def __init__(self, pos=[0.0, 0.0, 0.0], size=[1, 1, 1]):
-        self.pos = pos
+        self.pos = pygame.Vector3(pos)
         self.size = size
 
         # ONLY for internal usage, don't edit directly
-        self.cube = Cube(pos, size)
+        self.cube = Cube(self.pos.xyz, size)
 
         self.velocity = pygame.Vector3()
+        self.sprite = SPRITE_TILE_X
 
     def update(self, dt=0):
-        self.pos[0] += self.velocity.x
-        self.pos[1] += self.velocity.y
-        self.pos[2] += self.velocity.z
+        # self.pos.x += self.velocity.x
+        # self.pos.y += self.velocity.y
+        # self.pos.z += self.velocity.z
+        self.pos.xyz += self.velocity.xyz
 
-        # TODO clear velocity
-        self.velocity.update()
+        self.velocity.update()  # clear velocity
 
-        self.cube.pos = self.pos
+        self.cube.topleft = self.pos.xz
 
-    def draw(self):
-        pass
-
-
-class Mover(Thing):
+class Mover(Entity):
     def __init__(self, pos=[0.0, 0.0, 0.0]):
         super().__init__(pos)
 
@@ -534,12 +613,16 @@ class Mover(Thing):
 
         if get_control("left"):
             self.velocity.x -= 1
+            self.velocity.z += 1
         if get_control("right"):
             self.velocity.x += 1
+            self.velocity.z -= 1
         if get_control("up"):
             self.velocity.z -= 1
+            self.velocity.x -= 1
         if get_control("down"):
             self.velocity.z += 1
+            self.velocity.x += 1
 
 ###
 
@@ -550,15 +633,33 @@ def draw_isometric(surf, x, y, z, sprite):
         (z * 1 + x * 1 - y)
     ))
 
-    debug_add(x-z)
-    debug_add(z+x-y)
-
 
 def draw_tile(surf, x, y, z, tile):
     surf.blit(tile, (
         (x * TILE_WIDTH - z * TILE_WIDTH),
         (z * TILE_STAGGER + x * TILE_STAGGER - y * TILE_HEIGHT)
     ))
+
+
+def draw_world_topdown(surf, world):
+    surf_td = pygame.Surface((150, 150))
+    surf_td.fill("Black")
+
+    for chunk in world.chunks:
+        for tile in world.chunks[chunk].tiles:
+            if tile.split(" ")[1] == "0":
+                cx, _, cz = tile.split(" ")
+                cx, cz = int(cx), int(cz)
+
+                r = pygame.Rect(cx + 75, cz + 75, 1, 1)
+                pygame.draw.rect(surf_td, "White", r)
+
+    for entity in world.entities:
+        r = pygame.Rect(entity.pos.x + 75, entity.pos.z + 75, 1, 1)
+        pygame.draw.rect(surf_td, "Red", r)
+
+    surf_size = surf.get_size()
+    surf.blit(surf_td, (surf_size[0] - 150, 0))
 
 
 gamestates = {
@@ -569,7 +670,8 @@ gamestates = {
 current_gamestate = gamestates["play"]
 current_gamestate.new_world()
 
-ent = Mover([5,5,5])
+# should add entity IDs, the list will likely get sorted for rendering
+# ent = current_gamestate.world.entities[0]
 
 # Gameloop
 while True:
@@ -589,8 +691,7 @@ while True:
     current_gamestate.update()
     current_gamestate.draw(game_surface)
 
-    draw_isometric(game_surface, ent.pos[0], ent.pos[1], ent.pos[2], SPRITE_TILE_X)
-    ent.update()
+    draw_world_topdown(game_surface, current_gamestate.world)
 
     game_window.blit(pygame.transform.scale(
         game_surface, PY_SCALED_RES), (0, 0)
