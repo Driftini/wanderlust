@@ -1,5 +1,7 @@
+from config import *
 import pygame
 import math
+
 
 pygame.init()
 
@@ -69,6 +71,11 @@ def get_angle(pos1, pos2):
 
     return angle
 
+def get_visual_position(x, y, z):
+    return (
+        x * TILE_WIDTH - z * TILE_WIDTH,
+        z * TILE_STAGGER + x * TILE_STAGGER - y * TILE_HEIGHT
+    )
 
 # Dynamic debug print
 debug_font = pygame.font.Font(None, 24)
