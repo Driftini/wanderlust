@@ -5,11 +5,12 @@ from utils import *
 
 
 class Mover(Entity):
-    def __init__(self, pos=[0.0, 0.0, 0.0]):
-        super().__init__(pos)
+    def __init__(self, pos):
+        super().__init__(pos, [1, 1, 1])
 
         self.size = [TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH]  # tile-sized
         self.speed = .3
+        self.sprite = SPRITE_TILE_Z
 
     def update(self, dt=0):
         super().update(dt)

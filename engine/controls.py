@@ -22,8 +22,7 @@ controls = {
     "dbg_genworld": Control(K_F1, False, "Generate random world"),
     "dbg_genaxes": Control(K_F2, False, "Generate axes world"),
     "dbg_gencube": Control(K_F3, False, "Generate cube world"),
-    "dbg_gengrid": Control(K_F4, False, "Generate grid world"),
-    "dbg_toggletimers": Control(K_F12, False, "Toggle debug timers (DISABLED)"),
+    "dbg_gengrid": Control(K_F4, False, "Generate grid world")
 }
 
 

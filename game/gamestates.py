@@ -25,7 +25,6 @@ class StatePlay(Gamestate):
 
         self.world.update_entities(dt)
 
-        # self.camera.set_target(self.world.entities[0].cube.center)
         self.camera.set_target(get_visual_position(
             self.world.entities[0].pos.x,
             self.world.entities[0].pos.y,
@@ -54,6 +53,8 @@ class StatePlay(Gamestate):
 
     def new_world(self, gentype="normal", seed=None,
                   y_multiplier=10, noise_octaves=.1):
+        debug_timers["chunkcache"].reset()
+        debug_timers["cameradraw"].reset()
         debug_timers["worldgen"].start()
 
         self.world = World(gentype, seed, y_multiplier, noise_octaves)
@@ -64,9 +65,7 @@ class StatePlay(Gamestate):
         )
 
         debug_timers["worldgen"].stop()
-        debug_timers["chunkcache"].reset()
-        debug_timers["cameradraw"].reset()
-
+        
     def add_debug_overlay(self):
         debug_add("== World ==")
         # debug_add(f"Tiles count: TODO")

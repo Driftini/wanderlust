@@ -1,5 +1,6 @@
 from config import *
 import pygame
+import time
 import math
 
 
@@ -105,3 +106,53 @@ def debug_draw(x=8, y=8):
         surf_render.blit(surf_text, rect_text)
 
         line_counter += 1
+
+# Debugging timers
+
+class DebugTimer:
+    def __init__(self, label=""):
+        self.reset()
+        self.label = label
+
+    def reset(self):
+        self.time_start = 0
+        self.time_stop = 0
+        self.value = 0
+        self.value_avg = 0
+        self.value_max = 0
+
+    def start(self):
+        if DEBUG_TIMERS:
+            self.time_start = time.time()
+    
+    def stop(self):
+        if DEBUG_TIMERS:
+            self.time_stop = time.time()
+
+            # Maximum calculation
+            self.value_max = max(self.value_max, self.time_stop - self.time_start)
+
+            # Duration calculation
+            self.value = self.time_stop - self.time_start
+
+            # Average calculation
+            if self.value_avg < 0: # Is this the timer's first run?
+                self.value_avg += self.value
+            else:
+                self.value_avg += self.value
+                self.value_avg /= 2
+
+    def get_val(self):
+        return int(self.value * 1000)
+    
+    def get_avg(self):
+        return int(self.value_avg * 1000)
+    
+    def get_max(self):
+        return int(self.value_max * 1000)
+    
+debug_timers = {
+    "worldgen": DebugTimer("World generation"),
+    "chunkcache": DebugTimer("Chunk caching"),
+    "cameradraw": DebugTimer("Camera drawing")
+}

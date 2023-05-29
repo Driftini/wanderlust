@@ -1,6 +1,6 @@
 from config import *
 from engine.controls import update_controls
-from engine.gamestates import StatePlay
+from game.gamestates import StatePlay
 import pygame
 from pygame.locals import *
 import sys

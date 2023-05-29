@@ -37,6 +37,8 @@ class Camera:
 
     def draw(self, surf):
         # Draw all currently visible drawables to a given surface
+        debug_timers["cameradraw"].start()
+        
         drawables = self.world.get_drawables(self.get_viewport())
 
         for d in drawables:
@@ -45,3 +47,6 @@ class Camera:
                           d[1][1] - self.get_pos()[1])
 
             surf.blit(d[0], actual_pos)
+
+        debug_timers["cameradraw"].stop()
+        

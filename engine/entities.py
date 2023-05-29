@@ -3,8 +3,9 @@ from engine.controls import get_control
 import pygame
 from utils import *
 
+
 class Cube(pygame.FRect):
-    def __init__(self, pos=[0.0, 0.0, 0.0], size=[1, 1, 1]):
+    def __init__(self, pos, size):
         # The FRect properties are used for the X and Z coordinates
         super().__init__(pos[0], pos[2], size[0], size[2])
 
@@ -19,7 +20,7 @@ class Cube(pygame.FRect):
 
 
 class Entity:
-    def __init__(self, pos=[0.0, 0.0, 0.0], size=[1, 1, 1]):
+    def __init__(self, pos, size):
         self.pos = pygame.Vector3(pos)
         self.size = size
 
@@ -37,3 +38,7 @@ class Entity:
             self.velocity.update()  # clear velocity
 
             self.cube.topleft = self.pos.xz
+
+class Collider():
+    def __init__(self, pos, size):
+        pass

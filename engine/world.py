@@ -2,7 +2,6 @@ from config import *
 from perlin_noise import PerlinNoise
 import pygame
 from pygame.locals import *
-import time
 from utils import *
 
 class Chunk:
@@ -38,14 +37,13 @@ class Chunk:
         return self.tiles[f"{cx} {y} {cz}"]
 
     def set_tile(self, x, y, z, tile=SPRITE_TILE):
-        if (0 <= x <= CHUNK_SIZE) and (0 <= y <= WORLD_HEIGHT) and (0 <= z <= CHUNK_SIZE):
+        if (0 <= y <= WORLD_HEIGHT):
             cx, cz = self.convert_coords(x, z)
 
             self.tiles[f"{cx} {y} {cz}"] = tile
 
     def render_cache(self):
-        if enable_timers:
-            start_time = time.time()
+        debug_timers["chunkcache"].start()
 
         # self.cache.fill((0, 0, 0, 20))
 
@@ -75,14 +73,7 @@ class Chunk:
 
             self.cache.blit(sprite, visual_pos)
 
-        if enable_timers:
-            total_time = time.time() - start_time
-            debug_timers["chunkcache_avg"] += total_time
-            debug_timers["chunkcache_avg"] /= 2
-
-            debug_timers["chunkcache_max"] = max(
-                debug_timers["chunkcache_max"], total_time
-            )
+        debug_timers["chunkcache"].stop()
 
     def get_surf(self):
         # Render the chunk to its cache surface,
@@ -138,16 +129,17 @@ class World:
 
                 for z in range(-5, 5):
                     for x in range(-5, 5):
-                        for y in range(-5, 5):
+                        for y in range(0, 10):
                             self.set_tile(x, y, z, gen_empty=True)
             case "grid":
                 self.seed = "Grid test"
 
-                for x in range(-10, 10):
-                    for z in range(-10, 10):
-                        if x % 2 != 0:
-                            self.set_tile(
-                                x=x, z=z, tile=SPRITE_TILE_Z, gen_empty=True)
+                for x in range(-50, 50):
+                    for z in range(-50, 50):
+                        if (x + z) % 2 != 0:
+                            self.set_tile(x=x, z=z, tile=SPRITE_TILE_X, gen_empty=True)
+                        else:
+                            self.set_tile(x=x, z=z, tile=SPRITE_TILE_Z, gen_empty=True)
 
         if WORLD_PRECACHE_CHUNKS:
             for chunk_id in self.chunks:
@@ -184,20 +176,22 @@ class World:
         elif gen_empty:
             # If the chunk doesn't exist and gen_empty is set,
             # generate it and retry
-            cx, cz = Chunk.convert_coords(Chunk, x, z)
+            chunk_id = self.get_chunk_id(x, z)
+            cx, cz = chunk_id.split(" ")
             self.generate_chunk(cx, cz)
 
             self.set_tile(x, y, z, tile)  # retry placing the tile
+
 
     def generate_chunk(self, cx, cz):
         # Generate a new chunk at CX, CZ
         if f"{cx} {cz}" not in self.chunks:
             # Only continue if the chunk doesn't already exist
+            print(f"[WORLDGEN] Creating chunk: CX {cx},\tCZ {cz}...")
+
             chunk = self.chunks[f"{cx} {cz}"] = Chunk()
-
+            
             if self.noise:
-                print(f"[WORLDGEN] Generating chunk: CX {cx},\tCZ {cz}...")
-
                 for z in range(0, CHUNK_SIZE):
                     # Calc corresponding world Z
                     wz = WORLD_ORIGIN[1] + z + cz * CHUNK_SIZE

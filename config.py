@@ -29,12 +29,5 @@ SPRITE_TILE = pygame.image.load("assets/sprites/tile.png")
 SPRITE_TILE_X = pygame.image.load("assets/sprites/tile_axis_x.png")
 SPRITE_TILE_Z = pygame.image.load("assets/sprites/tile_axis_z.png")
 
-# Debugging timers
-enable_timers = True  # bad name
-debug_timers = {
-    "last_worldgen": 0,
-    "chunkcache_avg": 0,
-    "chunkcache_max": 0,
-    "chunkdraw_avg": 0,
-    "chunkdraw_max": 0,
-}
+# Debugging stuff
+DEBUG_TIMERS = True
