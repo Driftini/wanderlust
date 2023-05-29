@@ -12,7 +12,7 @@ PY_SCALED_RES = (PY_RESOLUTION[0] * PY_SCALE, PY_RESOLUTION[1] * PY_SCALE)
 PY_TARGET_FPS = 75
 PY_TITLE = "Isometric world renderer thing"
 
-# Tile rendering constants
+# Rendering constants
 TILE_WIDTH = 8
 TILE_HEIGHT = 8
 TILE_STAGGER = 4
@@ -140,7 +140,12 @@ class StatePlay(Gamestate):
 
         self.world.update_entities(dt)
 
-        self.camera.set_target(self.world.entities[0].cube.center)
+        # self.camera.set_target(self.world.entities[0].cube.center)
+        self.camera.set_target(get_visual_position(
+            self.world.entities[0].pos.x,
+            self.world.entities[0].pos.y,
+            self.world.entities[0].pos.z
+        ))
 
         self.camera.update()
 
@@ -249,8 +254,9 @@ class StatePlay(Gamestate):
 
 
 class Chunk:
-    # Chunks use chunk coordinates (cx cz),
+    # Tiles inside chunks use chunk coordinates (cx, cz),
     # spanning from 0 to CHUNK_SIZE on the X and Z axes
+    # Chunks themselves have chunk IDs (ALSO cx cz)
     def __init__(self):
         self.tiles = {}
 
@@ -290,7 +296,7 @@ class Chunk:
         if enable_timers:
             start_time = time.time()
 
-        self.cache.fill((0, 0, 0, 20))
+        # self.cache.fill((0, 0, 0, 20))
 
         for coords in self.tiles:
             cx, y, cz = coords.split(" ")
@@ -298,22 +304,25 @@ class Chunk:
 
             tile_type = self.tiles[coords]
 
-            tinted = tile_type.copy()
+            sprite = tile_type.copy()
 
             # Lower y tiles are shadowed
             shadow_func = (y + 5) * 20
             shadow = clamp(shadow_func, 0, 255)
 
-            tinted.fill((shadow, shadow, shadow, 255),
+            sprite.fill((shadow, shadow, shadow, 255),
                         special_flags=pygame.BLEND_MULT)
 
             # cx is altered to center the chunk in the surface,
             # y is altered to make the whole chunk
             # fit vertically in the surface
-            draw_tile(self.cache,
-                      cx + CHUNK_SIZE - 1, y -
-                      WORLD_HEIGHT + (CHUNK_SIZE / 2), cz,
-                      tinted)
+            visual_pos = get_visual_position(
+                cx + CHUNK_SIZE - 1,
+                y - WORLD_HEIGHT + (CHUNK_SIZE / 2),
+                cz
+            )
+
+            self.cache.blit(sprite, visual_pos)
 
         if enable_timers:
             total_time = time.time() - start_time
@@ -386,11 +395,12 @@ class World:
                 for x in range(-10, 10):
                     for z in range(-10, 10):
                         if x % 2 != 0:
-                            self.set_tile(x=x, z=z, tile=SPRITE_TILE_Z, gen_empty=True)
+                            self.set_tile(
+                                x=x, z=z, tile=SPRITE_TILE_Z, gen_empty=True)
 
         if WORLD_PRECACHE_CHUNKS:
-            for chunk_coords in self.chunks:
-                self.chunks[chunk_coords].get_surf()
+            for chunk_id in self.chunks:
+                self.chunks[chunk_id].get_surf()
 
         print(f"[WORLD] World init done!")
 
@@ -451,8 +461,8 @@ class World:
                         # Clamp minimum height to avoid holes in the world
                         y_peak = clamp_min(y_peak + 5, 1)
 
-                        for actual_y in range(0, y_peak):
-                            chunk.set_tile(x, actual_y, z)
+                        for y in range(0, y_peak):
+                            chunk.set_tile(x, y, z)
 
     def update_loaded_chunks(self):
         # Update the list of loaded chunks
@@ -488,24 +498,27 @@ class World:
         drawables = []  # format: (surf, rect)
 
         # Get drawable chunks
-        for chunk_coords in self.chunks:
-            # Get the chunk coords and surface...
-            cx, cz = chunk_coords.split(" ")
+        for chunk_id in self.chunks:
+            # Get the chunk ID and surface...
+            cx, cz = chunk_id.split(" ")
             cx, cz = int(cx), int(cz)
 
-            c_surf_size = self.chunks[chunk_coords].get_surf_size()
+            c_surf_size = self.chunks[chunk_id].get_surf_size()
 
             # Calculate the chunk's draw rect...
+
+            # The magic numbers that are subtracted fix the massive offset
+            # that is normally there
             draw_pos = (
-                cx * CHUNK_RENDERX - cz * CHUNK_RENDERX,
-                cz * CHUNK_STAGGER + cx * CHUNK_STAGGER
+                cx * CHUNK_RENDERX - cz * CHUNK_RENDERX - 248,
+                cz * CHUNK_STAGGER + cx * CHUNK_STAGGER - 396
             )
 
             draw_rect = Rect(draw_pos, c_surf_size)
 
             # And check if the chunk is inside the viewport
             if viewport.colliderect(draw_rect):
-                c_surf = self.chunks[chunk_coords].get_surf()
+                c_surf = self.chunks[chunk_id].get_surf()
                 drawables.append((c_surf, draw_pos))
 
         # Get drawable entities
@@ -513,11 +526,13 @@ class World:
         for entity in self.entities:
             # TODO viewport checks
 
-            # rs = pygame.Surface((20,20))
+            draw_pos = (
+                entity.pos.x * TILE_WIDTH - entity.pos.z * TILE_WIDTH,
+                entity.pos.z * TILE_STAGGER + entity.pos.x *
+                TILE_STAGGER - entity.pos.y * TILE_HEIGHT
+            )
 
-            # pygame.draw.rect(rs, "Red", Rect(entity.pos.xz, (20,20)))
-            # drawables.append((rs, entity.pos.xz))
-            drawables.append((entity.sprite, entity.pos.xz))
+            drawables.append((entity.sprite, draw_pos))
 
         return drawables
 
@@ -559,7 +574,7 @@ class Camera:
         drawables = self.world.get_drawables(self.get_viewport())
 
         for d in drawables:
-            # Apply camera postion to the drawables' rects
+            # Apply camera postion to the drawables
             actual_pos = (d[1][0] - self.get_pos()[0],
                           d[1][1] - self.get_pos()[1])
 
@@ -593,73 +608,49 @@ class Entity:
         self.sprite = SPRITE_TILE_X
 
     def update(self, dt=0):
-        # self.pos.x += self.velocity.x
-        # self.pos.y += self.velocity.y
-        # self.pos.z += self.velocity.z
-        self.pos.xyz += self.velocity.xyz
+        if self.velocity.length() != 0:
+            # self.velocity.normalize_ip()
 
-        self.velocity.update()  # clear velocity
+            self.pos += self.velocity
+            self.velocity.update()  # clear velocity
 
-        self.cube.topleft = self.pos.xz
+            self.cube.topleft = self.pos.xz
+
 
 class Mover(Entity):
     def __init__(self, pos=[0.0, 0.0, 0.0]):
         super().__init__(pos)
 
-        self.size = [TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH]
+        self.size = [TILE_WIDTH, TILE_HEIGHT, TILE_WIDTH]  # tile-sized
+        self.speed = .3
 
     def update(self, dt=0):
         super().update(dt)
 
         if get_control("left"):
-            self.velocity.x -= 1
-            self.velocity.z += 1
+            self.velocity.x -= self.speed
+            self.velocity.z += self.speed
         if get_control("right"):
-            self.velocity.x += 1
-            self.velocity.z -= 1
+            self.velocity.x += self.speed
+            self.velocity.z -= self.speed
         if get_control("up"):
-            self.velocity.z -= 1
-            self.velocity.x -= 1
+            self.velocity.z -= self.speed
+            self.velocity.x -= self.speed
         if get_control("down"):
-            self.velocity.z += 1
-            self.velocity.x += 1
+            self.velocity.z += self.speed
+            self.velocity.x += self.speed
+
+        debug_add(f"entity velocity: {self.velocity.xyz}")
+        debug_add(f"entity pos: {self.pos.xyz}")
 
 ###
 
 
-def draw_isometric(surf, x, y, z, sprite):
-    surf.blit(sprite, (
-        (x - z),
-        (z * 1 + x * 1 - y)
-    ))
-
-
-def draw_tile(surf, x, y, z, tile):
-    surf.blit(tile, (
-        (x * TILE_WIDTH - z * TILE_WIDTH),
-        (z * TILE_STAGGER + x * TILE_STAGGER - y * TILE_HEIGHT)
-    ))
-
-
-def draw_world_topdown(surf, world):
-    surf_td = pygame.Surface((150, 150))
-    surf_td.fill("Black")
-
-    for chunk in world.chunks:
-        for tile in world.chunks[chunk].tiles:
-            if tile.split(" ")[1] == "0":
-                cx, _, cz = tile.split(" ")
-                cx, cz = int(cx), int(cz)
-
-                r = pygame.Rect(cx + 75, cz + 75, 1, 1)
-                pygame.draw.rect(surf_td, "White", r)
-
-    for entity in world.entities:
-        r = pygame.Rect(entity.pos.x + 75, entity.pos.z + 75, 1, 1)
-        pygame.draw.rect(surf_td, "Red", r)
-
-    surf_size = surf.get_size()
-    surf.blit(surf_td, (surf_size[0] - 150, 0))
+def get_visual_position(x, y, z):
+    return (
+        x * TILE_WIDTH - z * TILE_WIDTH,
+        z * TILE_STAGGER + x * TILE_STAGGER - y * TILE_HEIGHT
+    )
 
 
 gamestates = {
@@ -690,8 +681,6 @@ while True:
     update_controls()
     current_gamestate.update()
     current_gamestate.draw(game_surface)
-
-    draw_world_topdown(game_surface, current_gamestate.world)
 
     game_window.blit(pygame.transform.scale(
         game_surface, PY_SCALED_RES), (0, 0)
