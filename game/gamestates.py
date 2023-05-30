@@ -23,13 +23,9 @@ class StatePlay(Gamestate):
         self.world.update_loaded_chunks()
         self.world.update_loaded_entities()
 
+        debug_timers["entityupdate"].start()
         self.world.update_entities(dt)
-
-        self.camera.set_target(get_visual_position(
-            self.world.entities[0].pos.x,
-            self.world.entities[0].pos.y,
-            self.world.entities[0].pos.z
-        ))
+        debug_timers["entityupdate"].stop()
 
         self.camera.update()
 
@@ -60,9 +56,8 @@ class StatePlay(Gamestate):
         self.world = World(gentype, seed, y_multiplier, noise_octaves)
         self.camera = Camera(PY_RESOLUTION, self.world)
 
-        self.world.entities.append(
-            entities.Mover([0, 1, 0])
-        )
+        player = self.world.spawn_entity(entities.Mover, [0, 1, 0])
+        self.camera.start_following(player)
 
         debug_timers["worldgen"].stop()
         
@@ -76,6 +71,7 @@ class StatePlay(Gamestate):
         debug_add(f"Initial generation radius: {WORLD_INIT_RADIUS}")
         debug_add(f"Chunk count: {len(self.world.chunks)}")
         debug_add(f"Chunk precaching: {WORLD_PRECACHE_CHUNKS}")
+        debug_add(f"Entity count: {len(self.world.entities)}")
 
         debug_add("")
 

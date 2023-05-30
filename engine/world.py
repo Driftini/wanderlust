@@ -1,4 +1,5 @@
 from config import *
+from engine.entities import Collider
 from perlin_noise import PerlinNoise
 import pygame
 from pygame.locals import *
@@ -94,15 +95,14 @@ class World:
     def __init__(self, gentype="normal", seed=None,
                  y_multiplier=10, noise_octaves=.1):
         print(f"[WORLD] Initializing new \"{gentype}\" world...")
-        self.chunks = {}
         self.noise = None
-
+        self.chunks = {}
         self.entities = []
-        self.tile_colliders = []  # ?
+        self.tile_colliders = [] # stored separately from entities to speed up updates
 
         self.loaded_chunks = {}
         self.loaded_entities = []
-        self.tile_colliders_loaded = []  # ?
+        self.loaded_tile_colliders = []
 
         match gentype:
             case "normal":
@@ -172,6 +172,7 @@ class World:
         chunk = self.find_chunk(x, z)
 
         if chunk:
+            self.spawn_entity(Collider, [x, y, z])
             chunk.set_tile(x, y, z, tile)
         elif gen_empty:
             # If the chunk doesn't exist and gen_empty is set,
@@ -207,7 +208,7 @@ class World:
                         y_peak = clamp_min(y_peak + 5, 1)
 
                         for y in range(0, y_peak):
-                            chunk.set_tile(x, y, z)
+                            self.set_tile(wx, y, wz)
 
     def update_loaded_chunks(self):
         # Update the list of loaded chunks
@@ -219,6 +220,18 @@ class World:
             self.loaded_chunks[chunk] = self.chunks[chunk]
 
     # Entity methods
+
+    def spawn_entity(self, entityclass, pos=[0,0,0]):
+        if entityclass is Collider:
+            collider = entityclass([], pos)
+            self.tile_colliders.append(collider)
+
+            return collider
+        else:
+            entity = entityclass(self.entities + self.tile_colliders, pos)
+            self.entities.append(entity)
+
+            return entity
 
     def update_loaded_entities(self):
         # Update the list of loaded entities
@@ -269,14 +282,18 @@ class World:
         # Get drawable entities
         # for entity in self.loaded_entities:
         for entity in self.entities:
-            # TODO viewport checks
+            if entity.visible:
+                draw_pos = get_visual_position(
+                    entity.pos.x,
+                    entity.pos.y,
+                    entity.pos.z
+                )
 
-            draw_pos = (
-                entity.pos.x * TILE_WIDTH - entity.pos.z * TILE_WIDTH,
-                entity.pos.z * TILE_STAGGER + entity.pos.x *
-                TILE_STAGGER - entity.pos.y * TILE_HEIGHT
-            )
+                entity_surf_size = entity.sprite.get_size()
 
-            drawables.append((entity.sprite, draw_pos))
+                draw_rect = Rect(draw_pos, entity_surf_size)
+
+                if viewport.colliderect(draw_rect):
+                    drawables.append((entity.sprite, draw_pos))
 
         return drawables

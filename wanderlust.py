@@ -25,7 +25,7 @@ current_gamestate.new_world()
 
 # Gameloop
 while True:
-    for event in pygame.event.get():  # this is NOT a control
+    for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
@@ -35,6 +35,7 @@ while True:
     debug_add("== General ==")
     debug_add(f"FPS: {int(clock.get_fps())}")
     debug_add(f"Frametime: {frametime}ms")
+    debug_add(f"-Z South, -X West, +Z North, +X East")
     debug_add("")
 
     update_controls()

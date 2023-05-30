@@ -154,5 +154,6 @@ class DebugTimer:
 debug_timers = {
     "worldgen": DebugTimer("World generation"),
     "chunkcache": DebugTimer("Chunk caching"),
-    "cameradraw": DebugTimer("Camera drawing")
+    "cameradraw": DebugTimer("Camera drawing"),
+    "entityupdate": DebugTimer("Entity updating")
 }
