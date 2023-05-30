@@ -136,7 +136,7 @@ class DebugTimer:
             self.value = self.time_stop - self.time_start
 
             # Average calculation
-            if self.value_avg < 0: # Is this the timer's first run?
+            if self.value_avg <= 0: # Is this the timer's first run?
                 self.value_avg += self.value
             else:
                 self.value_avg += self.value
