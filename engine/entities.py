@@ -14,7 +14,7 @@ class Cube(pygame.FRect):
 
     def collidecube(self, cube):
         # Like Rect.colliderect, but in three dimensions
-        if cube.pos_y < self.pos_y < self.size_y:
+        if cube.pos_y == self.pos_y == self.size_y:
             # Are both cubes intersecting in the y axis?
             return super().colliderect(cube)
         else:
@@ -81,41 +81,57 @@ class Entity:
             "down": False
         }
 
-        # Move along x axis...
-        self.pos.x += self.velocity.x
-        collisions_x = self.colliding_entities()
+        # Align pos and cube
+        self.pos.x = self.cube.x
+        self.pos.y = self.cube.pos_y
+        self.pos.z = self.cube.y
 
-        for c in collisions_x:
-            if self.velocity.x > 0:
-                self.right = c.pos.x
-                contact_sides["east"] = True
-            elif self.velocity.x < 0:
-                self.left = c.pos.x + c.size[0]
-                contact_sides["west"] = True
+        # Move along x axis...
+        collisions_x = []
+        if self.velocity.x != 0:
+            self.pos.x += self.velocity.x
+            collisions_x = self.colliding_entities()
+
+            for c in collisions_x:
+                if self.velocity.x > 0:
+                    self.pos.x = c.pos.x - self.size[0]
+                    contact_sides["east"] = True
+                elif self.velocity.x < 0:
+                    self.pos.x = c.pos.x + c.size[0]
+                    contact_sides["west"] = True
 
         # Move along y axis...
-        self.pos.y += self.velocity.y
-        collisions_y = self.colliding_entities()
+        collisions_y = []
+        if self.velocity.y != 0:
+            self.pos.y += self.velocity.y
+            collisions_y = self.colliding_entities()
 
-        for c in collisions_y:
-            if self.velocity.y > 0:
-                self.pos.y = c.pos.y - self.size[1]
-                contact_sides["up"] = True
-            elif self.velocity.y < 0:
-                self.pos.y = c.pos.y + c.size[1]
-                contact_sides["down"] = True
+            for c in collisions_y:
+                if self.velocity.y > 0:
+                    self.pos.y = c.pos.y - self.size[1]
+                    contact_sides["up"] = True
+                elif self.velocity.y < 0:
+                    self.pos.y = c.pos.y + c.size[1]
+                    contact_sides["down"] = True
 
         # Move along z axis...
-        self.pos.z += self.velocity.z
-        collisions_z = self.colliding_entities()
+        collisions_z = []
+        if self.velocity.z != 0:
+            self.pos.z += self.velocity.z
+            collisions_z = self.colliding_entities()
 
-        for c in collisions_z:
-            if self.velocity.z > 0:
-                self.pos.z = c.pos.z - self.size[2]
-                contact_sides["north"] = True
-            elif self.velocity.z < 0:
-                self.pos.z = c.pos.z
-                contact_sides["south"] = True
+            for c in collisions_z:
+                if self.velocity.z > 0:
+                    self.pos.z = c.pos.z - self.size[2]
+                    contact_sides["north"] = True
+                elif self.velocity.z < 0:
+                    self.pos.z = c.pos.z + c.size[2]
+                    contact_sides["south"] = True
+
+        # Apply movement
+        self.cube.x = self.pos.x
+        self.cube.pos_y = self.pos.y
+        self.cube.y = self.pos.z
 
         # Post-move callback
         collisions_all = collisions_x + collisions_y + collisions_z
@@ -123,11 +139,24 @@ class Entity:
 
     def move_callback(self, collisions, contact_sides):
         # Post-move callback
+        if contact_sides["east"]:
+            self.velocity.x = clamp_max(self.velocity.x, 0)
+        if contact_sides["west"]:
+            self.velocity.x = clamp_min(self.velocity.x, 0)
+        if contact_sides["up"]:
+            self.velocity.y = clamp_max(self.velocity.y, 0)
+        if contact_sides["down"]:
+            self.velocity.y = clamp_min(self.velocity.y, 0)
+        if contact_sides["north"]:
+            self.velocity.z = clamp_max(self.velocity.y, 0)
+        if contact_sides["south"]:
+            self.velocity.z = clamp_min(self.velocity.y, 0)
+        
         pass
 
 class Collider(Entity):
     def __init__(self, entitylist, pos):
-        super().__init__(entitylist, pos, (TILE_WIDTH,TILE_WIDTH,TILE_WIDTH))
+        super().__init__(entitylist, pos, (1,1,1))
         self.visible = False
 
     def update(self, dt=0):
