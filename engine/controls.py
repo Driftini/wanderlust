@@ -19,6 +19,9 @@ controls = {
     "up": Control(K_w, True),
     "down": Control(K_s, True),
 
+    "above": Control(K_q, True),
+    "below": Control(K_e, True),
+
     "dbg_genworld": Control(K_F1, False, "Generate random world"),
     "dbg_genaxes": Control(K_F2, False, "Generate axes world"),
     "dbg_gencube": Control(K_F3, False, "Generate cube world"),

@@ -26,6 +26,10 @@ class Mover(Entity):
         if get_control("down"):
             self.velocity.z += self.speed
             self.velocity.x += self.speed
+        if get_control("above"):
+            self.velocity.y += self.speed
+        if get_control("below"):
+            self.velocity.y -= self.speed
 
         debug_add(f"mover pos: {self.pos.xyz}")
         debug_add(f"mover velocity: {self.velocity.xyz}")
@@ -34,3 +38,4 @@ class Mover(Entity):
         super().move_callback(collisions, contact_sides)
         debug_add(f"mover collisions {len(collisions)}")
         debug_add(f"mover contact sides: {contact_sides}")
+        debug_add(f"mover cube y{self.cube.pos_y}")

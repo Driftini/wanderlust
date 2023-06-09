@@ -14,24 +14,11 @@ class Cube(pygame.FRect):
 
     def collidecube(self, cube):
         # Like Rect.colliderect, but in three dimensions
-        if cube.pos_y == self.pos_y == self.size_y:
+        if cube.pos_y < self.pos_y < cube.pos_y + cube.size_y:
             # Are both cubes intersecting in the y axis?
             return super().colliderect(cube)
         else:
             return False
-        
-    # def check_collisions(self, cubelist):
-    #     # Return a list of cubes colliding with the caller
-    #     collisions = []
-
-    #     for c in cubelist:
-    #         if c is not self:
-    #             if self.collidecube(c):
-    #                 collisions.append(c)
-
-    #     return collisions
-
-    # MOVE THIS TO ENTITY!!11
     
 
 class Entity:
