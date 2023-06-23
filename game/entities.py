@@ -5,8 +5,8 @@ from utils import *
 
 
 class Mover(Entity):
-    def __init__(self, colliderlist, pos):
-        super().__init__(colliderlist, pos, [1, 1, 1])
+    def __init__(self, world, pos):
+        super().__init__(world, pos, [1, 1, 1])
 
         self.speed = .3
         self.sprite = SPRITE_TILE_Z
@@ -37,4 +37,3 @@ class Mover(Entity):
 
     def move_callback(self, collisions, contact_sides):
         super().move_callback(collisions, contact_sides)
-        

@@ -24,6 +24,9 @@ CHUNK_SIZE = 32
 CHUNK_RENDERX = TILE_WIDTH * 2 * CHUNK_SIZE / 2
 CHUNK_STAGGER = CHUNK_SIZE * 4
 
+# Physics constants
+PHYS_TILEIMPRECISION = 1 # Makes nearby tile checks broader (bandaid fix currently)
+
 # Sprites
 SPRITE_TILE = pygame.image.load("assets/sprites/tile.png")
 SPRITE_TILE_X = pygame.image.load("assets/sprites/tile_axis_x.png")

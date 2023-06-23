@@ -29,9 +29,9 @@ class Cube:
 
 
 class Entity(Cube):
-    def __init__(self, entitylist, pos, size):
+    def __init__(self, world, pos, size):
         super().__init__(pos, size)
-        self.entitylist = entitylist
+        self.world = world
 
         self.velocity = pygame.Vector3()
         self.sprite = SPRITE_TILE
@@ -47,11 +47,31 @@ class Entity(Cube):
             # this should already happen...?
             # self.cube.topleft = self.pos.xz
 
+    def colliding_tiles(self):
+        # Get a list of tiles colliding with the caller
+        collisions = []
+
+        # shorter aliases
+        p = self.pos
+        ps = self.pos + self.size
+
+        for x in range(math.floor(p.x) - PHYS_TILEIMPRECISION, math.floor(ps.x) + PHYS_TILEIMPRECISION):
+            for y in range(math.floor(p.y) - PHYS_TILEIMPRECISION, math.floor(ps.y) + PHYS_TILEIMPRECISION):
+                for z in range(math.floor(p.z) - PHYS_TILEIMPRECISION, math.floor(ps.z) + PHYS_TILEIMPRECISION):
+                    if self.world.get_tile(x, y, z):
+                        c = Collider(self.world, (x, y, z))
+                        if self.check_collision(c):
+                            collisions.append(c)
+
+        debug_add(f"nearby tiles: {len(collisions)}")
+
+        return collisions
+
     def colliding_entities(self):
         # Get a list of entities colliding with the caller
         collisions = []
 
-        for e in self.entitylist:
+        for e in self.world.loaded_entities:
             if e is not self:
                 if self.check_collision(e):
                     collisions.append(e)
@@ -69,27 +89,11 @@ class Entity(Cube):
             "down": False
         }
 
-        collisions = self.colliding_entities()
-
-        for c in collisions:
-            if self.velocity.x > 0:
-                contact_sides["east"] = True
-            if self.velocity.x < 0:
-                contact_sides["west"] = True
-            if self.velocity.y > 0:
-                contact_sides["up"] = True
-            if self.velocity.y < 0:
-                contact_sides["down"] = True
-            if self.velocity.z > 0:
-                contact_sides["north"] = True
-            if self.velocity.z < 0:
-                contact_sides["south"] = True
-
         # Move along x axis...
         collisions_x = []
         if self.velocity.x != 0:
             self.pos.x += self.velocity.x
-            collisions_x = self.colliding_entities()
+            collisions_x = self.colliding_tiles()
 
             for c in collisions_x:
                 if self.velocity.x > 0:
@@ -103,7 +107,7 @@ class Entity(Cube):
         collisions_y = []
         if self.velocity.y != 0:
             self.pos.y += self.velocity.y
-            collisions_y = self.colliding_entities()
+            collisions_y = self.colliding_tiles()
 
             for c in collisions_y:
                 if self.velocity.y > 0:
@@ -117,7 +121,7 @@ class Entity(Cube):
         collisions_z = []
         if self.velocity.z != 0:
             self.pos.z += self.velocity.z
-            collisions_z = self.colliding_entities()
+            collisions_z = self.colliding_tiles()
 
             for c in collisions_z:
                 if self.velocity.z > 0:
@@ -148,8 +152,8 @@ class Entity(Cube):
 
 
 class Collider(Entity):
-    def __init__(self, entitylist, pos):
-        super().__init__(entitylist, pos, (1, 1, 1))
+    def __init__(self, world, pos):
+        super().__init__(world, pos, (1, 1, 1))
         self.visible = False
 
     def update(self, dt=0):

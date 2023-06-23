@@ -35,7 +35,8 @@ class Chunk:
     def get_tile(self, x, y, z):
         cx, cz = self.convert_coords(x, z)
 
-        return self.tiles[f"{cx} {y} {cz}"]
+        if f"{cx} {y} {cz}" in self.tiles:
+            return self.tiles[f"{cx} {y} {cz}"]
 
     def set_tile(self, x, y, z, tile=SPRITE_TILE):
         if (0 <= y <= WORLD_HEIGHT):
@@ -98,11 +99,9 @@ class World:
         self.noise = None
         self.chunks = {}
         self.entities = []
-        self.tile_colliders = [] # stored separately from entities to speed up updates
 
         self.loaded_chunks = {}
         self.loaded_entities = []
-        self.loaded_tile_colliders = []
 
         match gentype:
             case "normal":
@@ -164,7 +163,10 @@ class World:
     def get_tile(self, x, y, z):
         chunk = self.find_chunk(x, z)
 
-        return chunk.get_tile(x, y, z)
+        if chunk:
+            return chunk.get_tile(x, y, z)
+        else:
+            return False
 
     def set_tile(self, x=0, y=0, z=0, tile=SPRITE_TILE, gen_empty=False):
         # Places a tile at the given coordinates,
@@ -172,7 +174,6 @@ class World:
         chunk = self.find_chunk(x, z)
 
         if chunk:
-            self.spawn_entity(Collider, [x, y, z])
             chunk.set_tile(x, y, z, tile)
         elif gen_empty:
             # If the chunk doesn't exist and gen_empty is set,
@@ -221,17 +222,11 @@ class World:
 
     # Entity methods
 
-    def spawn_entity(self, entityclass, pos=[0,0,0]):
-        if entityclass is Collider:
-            collider = entityclass([], pos)
-            self.tile_colliders.append(collider)
+    def spawn_entity(self, entityclass, pos=[0, 0, 0]):
+        entity = entityclass(self, pos)
+        self.entities.append(entity)
 
-            return collider
-        else:
-            entity = entityclass(self.entities + self.tile_colliders, pos)
-            self.entities.append(entity)
-
-            return entity
+        return entity
 
     def update_loaded_entities(self):
         # Update the list of loaded entities
